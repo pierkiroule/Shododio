@@ -65,6 +65,7 @@ export default function App() {
     const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
+    let blurScale = 0;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -93,6 +94,7 @@ export default function App() {
     const exportMenu = document.getElementById("export-menu");
     const layeringToggle = document.getElementById("layering-toggle");
     const layeringValue = document.getElementById("layering-value");
+    const guideMarker = document.getElementById("guide-marker");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -105,6 +107,27 @@ export default function App() {
       }
     };
 
+    const markerState = {
+      x: 0,
+      y: 0,
+      dragging: false,
+      offsetX: 0,
+      offsetY: 0,
+      halfWidth: 0,
+      halfHeight: 0
+    };
+
+    const clampMarker = (value, max) => clamp(value, 0, Math.max(0, max));
+
+    const setMarkerPosition = (x, y) => {
+      if (!guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      markerState.x = clampMarker(x, rect.width);
+      markerState.y = clampMarker(y, rect.height);
+      guideMarker.style.left = `${markerState.x}px`;
+      guideMarker.style.top = `${markerState.y}px`;
+    };
+
     const resizeCanvas = () => {
       const rect = canvasWrap.getBoundingClientRect();
       const width = Math.max(1, Math.floor(rect.width * CANVAS_SCALE));
@@ -113,6 +136,41 @@ export default function App() {
       paper.width = width;
       paper.height = height;
       clearAll();
+      if (guideMarker) {
+        setMarkerPosition(markerState.x, markerState.y);
+      }
+    };
+
+    const onMarkerDown = (event) => {
+      if (!guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      const markerRect = guideMarker.getBoundingClientRect();
+      markerState.dragging = true;
+      guideMarker.classList.add("dragging");
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      markerState.halfWidth = markerRect.width / 2;
+      markerState.halfHeight = markerRect.height / 2;
+      markerState.offsetX = event.clientX - markerRect.left;
+      markerState.offsetY = event.clientY - markerRect.top;
+      guideMarker.setPointerCapture(event.pointerId);
+    };
+
+    const onMarkerMove = (event) => {
+      if (!markerState.dragging || !guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      const nextX = pointerX - markerState.offsetX + markerState.halfWidth;
+      const nextY = pointerY - markerState.offsetY + markerState.halfHeight;
+      setMarkerPosition(nextX, nextY);
+    };
+
+    const onMarkerUp = (event) => {
+      if (!markerState.dragging || !guideMarker) return;
+      markerState.dragging = false;
+      guideMarker.classList.remove("dragging");
+      guideMarker.releasePointerCapture(event.pointerId);
     };
 
     const addSplatter = (ctx, cx, cy, intensity, baseRgb) => {
@@ -198,6 +256,7 @@ export default function App() {
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
       ctx.save();
+      ctx.filter = blurScale > 0 ? `blur(${blurScale}px)` : "none";
       ctx.globalCompositeOperation = "multiply";
 
       let dx = x2 - x1;
@@ -447,6 +506,24 @@ export default function App() {
       };
     };
 
+    const setupBlurControls = () => {
+      const blurRange = document.getElementById("blur-range");
+      const blurValue = document.getElementById("blur-value");
+      const updateBlur = (value) => {
+        const numeric = parseFloat(value);
+        blurScale = clamp(numeric, 0, 12);
+        blurValue.textContent = `${blurScale.toFixed(1)}px`;
+      };
+      const onInput = (event) => updateBlur(event.target.value);
+      blurRange.addEventListener("input", onInput);
+      blurRange.addEventListener("change", onInput);
+      updateBlur(blurRange.value);
+      return () => {
+        blurRange.removeEventListener("input", onInput);
+        blurRange.removeEventListener("change", onInput);
+      };
+    };
+
     const setupControls = () => {
       const brushContainer = document.getElementById("brush-options");
       const colorContainer = document.getElementById("color-options");
@@ -609,8 +686,16 @@ export default function App() {
     };
 
     const resetVoiceState = () => {
-      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
-      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      if (guideMarker && canvasWrap) {
+        const rect = canvasWrap.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? paper.width / rect.width : 1;
+        const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
+        voiceState.x = clampMarker(markerState.x, rect.width) * scaleX;
+        voiceState.y = clampMarker(markerState.y, rect.height) * scaleY;
+      } else {
+        voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
+        voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      }
       voiceState.angle = Math.random() * Math.PI * 2;
       voiceState.velocity = 0;
       lastFrameTime = performance.now();
@@ -790,12 +875,21 @@ export default function App() {
     stopBtn.addEventListener("click", onStop);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
+    const cleanupBlur = setupBlurControls();
     const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
     saveVideoBtn.disabled = true;
     resetVoiceState();
+    if (guideMarker && canvasWrap) {
+      const rect = canvasWrap.getBoundingClientRect();
+      setMarkerPosition(rect.width * 0.5, rect.height * 0.5);
+      guideMarker.addEventListener("pointerdown", onMarkerDown);
+      window.addEventListener("pointermove", onMarkerMove);
+      window.addEventListener("pointerup", onMarkerUp);
+      window.addEventListener("pointercancel", onMarkerUp);
+    }
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -804,6 +898,7 @@ export default function App() {
     return () => {
       cleanupSize();
       cleanupOpacity();
+      cleanupBlur();
       cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
@@ -813,6 +908,12 @@ export default function App() {
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
+      if (guideMarker) {
+        guideMarker.removeEventListener("pointerdown", onMarkerDown);
+      }
+      window.removeEventListener("pointermove", onMarkerMove);
+      window.removeEventListener("pointerup", onMarkerUp);
+      window.removeEventListener("pointercancel", onMarkerUp);
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, []);
@@ -828,6 +929,9 @@ export default function App() {
       <div className="canvas-area" ref={canvasWrapRef}>
         <canvas id="paper-layer" ref={canvasRef}></canvas>
         <div className="paper-texture"></div>
+        <div id="guide-marker" className="guide-marker" aria-hidden="true">
+          <div className="guide-marker__core"></div>
+        </div>
         <div id="ui-layer" className="ui-layer">
           <div className="top-ui">
             <div id="status-msg">
@@ -884,6 +988,13 @@ export default function App() {
             <div className="size-row">
               <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
+            </div>
+          </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Blur FX</div>
+            <div className="size-row">
+              <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
+              <span id="blur-value" className="size-value">0.0px</span>
             </div>
           </div>
           <div className="control-block slider-block">
