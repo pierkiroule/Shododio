@@ -81,6 +81,9 @@ export default function App() {
     let previewLx;
     let previewLy;
     let resizeObserver;
+    let countdownTimer;
+    let countdownValue = 0;
+    let countdownActive = false;
 
     const mainBtn = document.getElementById("main-btn");
     const secBtn = document.getElementById("secondary-btn");
@@ -88,6 +91,7 @@ export default function App() {
     const recDot = document.getElementById("rec-dot");
     const timerContainer = document.getElementById("timer-container");
     const specViz = document.getElementById("spectrum-viz");
+    const countdownDisplay = document.getElementById("countdown-display");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -292,6 +296,22 @@ export default function App() {
         energy: {
           rms: clamp(0.45 + pulse * 0.25, 0, 1),
           peak: clamp(0.2 + pulse * 0.35, 0, 1)
+        },
+        force: true
+      };
+    };
+
+    const getTestDrive = () => {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 700);
+      return {
+        bands: {
+          low: clamp(0.2 + pulse * 0.2, 0, 1),
+          mid: clamp(0.4 + pulse * 0.25, 0, 1),
+          high: clamp(0.25 + pulse * 0.2, 0, 1)
+        },
+        energy: {
+          rms: clamp(0.35 + pulse * 0.2, 0, 1),
+          peak: clamp(0.15 + pulse * 0.25, 0, 1)
         },
         force: true
       };
@@ -574,8 +594,12 @@ export default function App() {
         ly = y;
         return;
       }
-      if (lx !== undefined && phase === "DRAWING") {
-        drawSpectralBrush(ctxP, lx, ly, x, y);
+      if (lx !== undefined) {
+        if (phase === "DRAWING") {
+          drawSpectralBrush(ctxP, lx, ly, x, y);
+        } else if (phase === "READY" || phase === "PAUSED") {
+          drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
+        }
       }
       lx = x;
       ly = y;
@@ -602,7 +626,7 @@ export default function App() {
       return 7000;
     };
 
-    const startCycle = () => {
+    const startDrawingCycle = () => {
       phase = "DRAWING";
       timeLimit = getCycleDuration();
       startTime = Date.now();
@@ -626,6 +650,39 @@ export default function App() {
       }
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    };
+
+    const stopCountdown = () => {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = undefined;
+      }
+      countdownActive = false;
+      countdownDisplay.classList.remove("active");
+    };
+
+    const beginCountdown = () => {
+      if (countdownActive) return;
+      stopCountdown();
+      phase = "COUNTDOWN";
+      statusText.innerText = "Départ imminent";
+      countdownValue = 3;
+      countdownActive = true;
+      countdownDisplay.textContent = countdownValue.toString();
+      countdownDisplay.classList.add("active");
+      countdownTimer = window.setInterval(() => {
+        countdownValue -= 1;
+        countdownDisplay.textContent = countdownValue.toString();
+        if (countdownValue <= 0) {
+          stopCountdown();
+          startDrawingCycle();
+        }
+      }, 1000);
+    };
+
+    const startCycle = () => {
+      clearAll();
+      beginCountdown();
     };
 
     const pauseCycle = () => {
@@ -655,6 +712,7 @@ export default function App() {
     };
 
     const finishRitual = () => {
+      stopCountdown();
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.stop();
       }
@@ -675,6 +733,7 @@ export default function App() {
 
     const resetRitual = () => {
       phase = "READY";
+      stopCountdown();
       clearAll();
       recordedChunks = [];
       cycleIndex = 0;
@@ -767,6 +826,7 @@ export default function App() {
       cleanupPreview();
       cleanupSize();
       cleanupPanel();
+      stopCountdown();
       initBtn.removeEventListener("click", onInitClick);
       closeReplayBtn.removeEventListener("click", onCloseReplay);
       resetBtn.removeEventListener("click", resetRitual);
@@ -807,6 +867,7 @@ export default function App() {
               <div id="rec-dot"></div>
               <span id="status-text">Prêt à tracer</span>
             </div>
+            <div id="countdown-display" className="countdown-display">3</div>
 
             <div id="timer-container">
               <div id="timer-display">7.0</div>
