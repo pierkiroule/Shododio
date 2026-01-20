@@ -52,9 +52,6 @@ export default function App() {
     let startTime = 0;
     let timeLimit = 7000;
     let remainingTime = 0;
-    let isDown = false;
-    let lx;
-    let ly;
     const CANVAS_SCALE = 3;
     const MIN_BRUSH_SCALE = 0.12;
     let brushSizeScale = 1;
@@ -69,6 +66,13 @@ export default function App() {
     let activeBrush = brushes[0];
     let activeInk = inkPalette[0];
     let resizeObserver;
+    let lastFrameTime = performance.now();
+    const voiceState = {
+      x: 0,
+      y: 0,
+      angle: 0,
+      velocity: 0
+    };
 
     const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
@@ -342,23 +346,7 @@ export default function App() {
     };
 
     const updateCycleStatus = () => {
-      statusText.innerText = "Prêt à tracer";
-    };
-
-    const getTestDrive = () => {
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 700);
-      return {
-        bands: {
-          low: clamp(0.2 + pulse * 0.2, 0, 1),
-          mid: clamp(0.4 + pulse * 0.25, 0, 1),
-          high: clamp(0.25 + pulse * 0.2, 0, 1)
-        },
-        energy: {
-          rms: clamp(0.35 + pulse * 0.2, 0, 1),
-          peak: clamp(0.15 + pulse * 0.25, 0, 1)
-        },
-        force: true
-      };
+      statusText.innerText = "Prêt à écouter";
     };
 
     const setupBrushSizeControls = () => {
@@ -545,49 +533,52 @@ export default function App() {
       return requestAnimationFrame(audioLoop);
     };
 
-    const getPointerPos = (event) => {
-      const rect = paper.getBoundingClientRect();
-      const scaleX = paper.width / rect.width;
-      const scaleY = paper.height / rect.height;
-      return {
-        x: (event.clientX - rect.left) * scaleX,
-        y: (event.clientY - rect.top) * scaleY
-      };
+    const resetVoiceState = () => {
+      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
+      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      voiceState.angle = Math.random() * Math.PI * 2;
+      voiceState.velocity = 0;
+      lastFrameTime = performance.now();
     };
 
-    const handleMove = (event) => {
-      if (!isDown) return;
-      if (event.pointerType === "touch") return;
-      const { x, y } = getPointerPos(event);
-      if (y > paper.height) {
-        lx = x;
-        ly = y;
-        return;
+    const paintFromVoice = (timestamp) => {
+      const delta = Math.min(48, timestamp - lastFrameTime);
+      lastFrameTime = timestamp;
+      const energy = audioEnergy.rms;
+      const burst = audioEnergy.peak;
+      const loudness = clamp(energy + burst * 0.6, 0, 1.2);
+      const targetVelocity = clamp(1.2 + loudness * 18 + bands.mid * 6, 1.2, 24);
+      voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
+
+      const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
+      voiceState.angle += turnAmount;
+
+      const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
+      const dy = Math.sin(voiceState.angle) * voiceState.velocity * (delta / 16);
+      const nx = voiceState.x + dx;
+      const ny = voiceState.y + dy;
+
+      drawSpectralBrush(ctxP, voiceState.x, voiceState.y, nx, ny);
+
+      voiceState.x = nx;
+      voiceState.y = ny;
+
+      const margin = 40 * CANVAS_SCALE;
+      if (voiceState.x < margin) {
+        voiceState.x = margin;
+        voiceState.angle = Math.PI - voiceState.angle;
+      } else if (voiceState.x > paper.width - margin) {
+        voiceState.x = paper.width - margin;
+        voiceState.angle = Math.PI - voiceState.angle;
       }
-      if (lx !== undefined) {
-        if (phase === "DRAWING") {
-          drawSpectralBrush(ctxP, lx, ly, x, y);
-        } else if (phase === "READY") {
-          drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
-        }
+
+      if (voiceState.y < margin) {
+        voiceState.y = margin;
+        voiceState.angle = -voiceState.angle;
+      } else if (voiceState.y > paper.height - margin) {
+        voiceState.y = paper.height - margin;
+        voiceState.angle = -voiceState.angle;
       }
-      lx = x;
-      ly = y;
-    };
-
-    const handleDown = (event) => {
-      if (event.pointerType === "touch") return;
-      isDown = true;
-      const { x, y } = getPointerPos(event);
-      lx = x;
-      ly = y;
-      handleMove(event);
-    };
-
-    const handleUp = () => {
-      isDown = false;
-      lx = undefined;
-      ly = undefined;
     };
 
     const startDrawingCycle = () => {
@@ -595,6 +586,7 @@ export default function App() {
       timeLimit = 7000;
       startTime = Date.now();
       remainingTime = timeLimit;
+      resetVoiceState();
 
       if (mediaRecorder && mediaRecorder.state === "inactive") {
         mediaRecorder.start();
@@ -606,7 +598,7 @@ export default function App() {
       mainBtn.style.display = "none";
       timerContainer.style.opacity = 1;
       specViz.style.opacity = 1;
-      statusText.innerText = "Enregistrement en cours...";
+      statusText.innerText = "Voix en peinture...";
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     };
@@ -634,8 +626,9 @@ export default function App() {
       recordedChunks = [];
       lastVideoUrl = undefined;
       saveVideoBtn.disabled = true;
+      resetVoiceState();
 
-      mainBtn.innerText = "Go•°";
+      mainBtn.innerText = "Peindre";
       mainBtn.style.display = "block";
 
       timerContainer.style.opacity = 0;
@@ -652,6 +645,8 @@ export default function App() {
 
         document.getElementById("timer-display").innerText = (remainingTime / 1000).toFixed(1);
         document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
+
+        paintFromVoice(performance.now());
 
         if (remainingTime <= 0) {
           phase = "FINISHED";
@@ -705,16 +700,13 @@ export default function App() {
     saveVideoBtn.addEventListener("click", onSaveVideo);
     exportToggle.addEventListener("click", onExportToggle);
     mainBtn.addEventListener("click", onMainClick);
-
-    paper.addEventListener("pointerdown", handleDown);
-    paper.addEventListener("pointermove", handleMove);
-    paper.addEventListener("pointerup", handleUp);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
     saveVideoBtn.disabled = true;
+    resetVoiceState();
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -729,9 +721,6 @@ export default function App() {
       saveVideoBtn.removeEventListener("click", onSaveVideo);
       exportToggle.removeEventListener("click", onExportToggle);
       mainBtn.removeEventListener("click", onMainClick);
-      paper.removeEventListener("pointerdown", handleDown);
-      paper.removeEventListener("pointermove", handleMove);
-      paper.removeEventListener("pointerup", handleUp);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
     };
@@ -741,8 +730,8 @@ export default function App() {
     <div className="app">
       <div id="boot-screen" className="overlay">
         <h1>LA VOIX DU SHODO</h1>
-        <p className="boot-subtitle">RITUEL SPECTRAL</p>
-        <button id="init-btn">Activer le Pinceau</button>
+        <p className="boot-subtitle">RITUEL VOCAL</p>
+        <button id="init-btn">Activer le Micro</button>
       </div>
 
       <div className="canvas-area" ref={canvasWrapRef}>
@@ -752,7 +741,7 @@ export default function App() {
           <div className="top-ui">
             <div id="status-msg">
               <div id="rec-dot"></div>
-              <span id="status-text">Prêt à tracer</span>
+              <span id="status-text">Prêt à écouter</span>
             </div>
             <div id="timer-container">
               <div id="timer-display">7.0</div>
@@ -766,7 +755,7 @@ export default function App() {
           </div>
 
           <div className="action-area">
-            <button id="main-btn" className="main-btn">Go•°</button>
+            <button id="main-btn" className="main-btn">Peindre</button>
           </div>
         </div>
       </div>
