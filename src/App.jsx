@@ -65,6 +65,7 @@ export default function App() {
     const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
+    let blurScale = 0;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -111,7 +112,9 @@ export default function App() {
       y: 0,
       dragging: false,
       offsetX: 0,
-      offsetY: 0
+      offsetY: 0,
+      halfWidth: 0,
+      halfHeight: 0
     };
 
     const clampMarker = (value, max) => clamp(value, 0, Math.max(0, max));
@@ -141,20 +144,25 @@ export default function App() {
     const onMarkerDown = (event) => {
       if (!guideMarker || !canvasWrap) return;
       const rect = canvasWrap.getBoundingClientRect();
+      const markerRect = guideMarker.getBoundingClientRect();
       markerState.dragging = true;
       guideMarker.classList.add("dragging");
       const pointerX = event.clientX - rect.left;
       const pointerY = event.clientY - rect.top;
-      markerState.offsetX = pointerX - markerState.x;
-      markerState.offsetY = pointerY - markerState.y;
+      markerState.halfWidth = markerRect.width / 2;
+      markerState.halfHeight = markerRect.height / 2;
+      markerState.offsetX = event.clientX - markerRect.left;
+      markerState.offsetY = event.clientY - markerRect.top;
       guideMarker.setPointerCapture(event.pointerId);
     };
 
     const onMarkerMove = (event) => {
       if (!markerState.dragging || !guideMarker || !canvasWrap) return;
       const rect = canvasWrap.getBoundingClientRect();
-      const nextX = event.clientX - rect.left - markerState.offsetX;
-      const nextY = event.clientY - rect.top - markerState.offsetY;
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      const nextX = pointerX - markerState.offsetX + markerState.halfWidth;
+      const nextY = pointerY - markerState.offsetY + markerState.halfHeight;
       setMarkerPosition(nextX, nextY);
     };
 
@@ -248,6 +256,7 @@ export default function App() {
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
       ctx.save();
+      ctx.filter = blurScale > 0 ? `blur(${blurScale}px)` : "none";
       ctx.globalCompositeOperation = "multiply";
 
       let dx = x2 - x1;
@@ -494,6 +503,24 @@ export default function App() {
       return () => {
         opacityRange.removeEventListener("input", onInput);
         opacityRange.removeEventListener("change", onInput);
+      };
+    };
+
+    const setupBlurControls = () => {
+      const blurRange = document.getElementById("blur-range");
+      const blurValue = document.getElementById("blur-value");
+      const updateBlur = (value) => {
+        const numeric = parseFloat(value);
+        blurScale = clamp(numeric, 0, 12);
+        blurValue.textContent = `${blurScale.toFixed(1)}px`;
+      };
+      const onInput = (event) => updateBlur(event.target.value);
+      blurRange.addEventListener("input", onInput);
+      blurRange.addEventListener("change", onInput);
+      updateBlur(blurRange.value);
+      return () => {
+        blurRange.removeEventListener("input", onInput);
+        blurRange.removeEventListener("change", onInput);
       };
     };
 
@@ -848,6 +875,7 @@ export default function App() {
     stopBtn.addEventListener("click", onStop);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
+    const cleanupBlur = setupBlurControls();
     const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
@@ -870,6 +898,7 @@ export default function App() {
     return () => {
       cleanupSize();
       cleanupOpacity();
+      cleanupBlur();
       cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
@@ -959,6 +988,13 @@ export default function App() {
             <div className="size-row">
               <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
+            </div>
+          </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Blur FX</div>
+            <div className="size-row">
+              <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
+              <span id="blur-value" className="size-value">0.0px</span>
             </div>
           </div>
           <div className="control-block slider-block">
