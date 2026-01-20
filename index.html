@@ -162,11 +162,13 @@
 
     .floating-panel {
       position: fixed;
-      right: 20px;
-      bottom: 90px;
-      width: 250px;
+      left: 16px;
+      right: 16px;
+      bottom: 12px;
+      width: auto;
       z-index: 120;
       box-shadow: 0 14px 30px rgba(0,0,0,0.08);
+      border-radius: 16px 16px 12px 12px;
     }
 
     .panel-header {
@@ -174,7 +176,7 @@
       align-items: center;
       justify-content: space-between;
       width: 100%;
-      cursor: grab;
+      cursor: default;
       font-size: 0.6rem;
       letter-spacing: 0.2em;
       text-transform: uppercase;
@@ -193,12 +195,13 @@
 
     .panel-body {
       display: flex;
-      flex-direction: column;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 14px;
       width: 100%;
-      max-height: 60vh;
+      max-height: 38vh;
       overflow-y: auto;
-      padding-right: 4px;
+      padding: 4px 4px 8px;
     }
 
     .panel-body::-webkit-scrollbar {
@@ -220,6 +223,11 @@
       gap: 8px;
       align-items: center;
       width: 100%;
+    }
+
+    .control-group.inline {
+      width: auto;
+      min-width: 150px;
     }
 
     .control-label {
@@ -316,6 +324,14 @@
       flex-direction: column;
       align-items: center;
       gap: 8px;
+    }
+
+    .preview-panel.hidden {
+      display: none;
+    }
+
+    .preview-group {
+      width: 100%;
     }
 
     .main-btn {
@@ -491,29 +507,30 @@
       <button id="panel-toggle" class="panel-toggle" type="button">Masquer</button>
     </div>
     <div class="panel-body">
-      <div class="control-group">
+      <div class="control-group inline">
         <div class="control-label">Pinceaux</div>
         <div id="brush-options" class="option-row compact"></div>
       </div>
-      <div class="control-group">
+      <div class="control-group inline">
         <div class="control-label">Encres</div>
         <div id="color-options" class="option-row compact"></div>
       </div>
-      <div class="control-group">
+      <div class="control-group inline">
         <div class="control-label">Taille du tracé</div>
         <div class="size-row">
           <input id="size-range" type="range" min="0.6" max="1.6" step="0.05" value="1" />
           <span id="size-value" class="size-value">100%</span>
         </div>
       </div>
-      <div class="control-group">
-        <div class="control-label">Test Pinceau</div>
-        <div class="preview-panel">
+      <div class="control-group preview-group">
+        <div class="control-label">Zone de test</div>
+        <button id="preview-toggle" class="chip-btn" type="button">Afficher la zone de test</button>
+        <div class="preview-panel hidden" id="preview-panel">
           <canvas id="preview-canvas" width="210" height="120"></canvas>
           <button id="preview-clear" class="chip-btn" type="button">Effacer</button>
         </div>
       </div>
-      <div class="control-group">
+      <div class="control-group inline">
         <div class="control-label">Cycle</div>
         <div id="cycle-options" class="option-row"></div>
       </div>
@@ -603,11 +620,14 @@
     function initCanvasSize() {
       const w = window.innerWidth;
       const h = window.innerHeight;
+      const panel = document.getElementById("floating-panel");
+      const panelHeight = panel ? panel.getBoundingClientRect().height : 0;
       if (Math.abs(w - lastW) < 50 && Math.abs(h - lastH) < 100) return;
       lastW = w;
       lastH = h;
       paper.width = w;
-      paper.height = h;
+      paper.height = Math.max(120, h - panelHeight);
+      paper.style.bottom = `${panelHeight}px`;
       clearAll();
     }
 
@@ -688,43 +708,11 @@
 
     function setupPanelInteractions() {
       const panel = document.getElementById("floating-panel");
-      const header = document.getElementById("panel-header");
       const toggleBtn = document.getElementById("panel-toggle");
-      let dragging = false;
-      let offsetX = 0;
-      let offsetY = 0;
 
       toggleBtn.addEventListener("click", () => {
         panel.classList.toggle("collapsed");
         toggleBtn.textContent = panel.classList.contains("collapsed") ? "Afficher" : "Masquer";
-      });
-
-      header.addEventListener("pointerdown", (event) => {
-        if (event.target === toggleBtn) return;
-        dragging = true;
-        header.setPointerCapture(event.pointerId);
-        const rect = panel.getBoundingClientRect();
-        offsetX = event.clientX - rect.left;
-        offsetY = event.clientY - rect.top;
-        panel.style.right = "auto";
-        panel.style.bottom = "auto";
-        panel.style.left = `${rect.left}px`;
-        panel.style.top = `${rect.top}px`;
-        header.style.cursor = "grabbing";
-      });
-
-      header.addEventListener("pointermove", (event) => {
-        if (!dragging) return;
-        const x = clamp(event.clientX - offsetX, 12, window.innerWidth - panel.offsetWidth - 12);
-        const y = clamp(event.clientY - offsetY, 12, window.innerHeight - panel.offsetHeight - 12);
-        panel.style.left = `${x}px`;
-        panel.style.top = `${y}px`;
-      });
-
-      header.addEventListener("pointerup", (event) => {
-        dragging = false;
-        header.releasePointerCapture(event.pointerId);
-        header.style.cursor = "grab";
       });
     }
 
@@ -747,6 +735,8 @@
       previewCanvas = document.getElementById("preview-canvas");
       previewCtx = previewCanvas.getContext("2d");
       clearPreview();
+      const previewPanel = document.getElementById("preview-panel");
+      const previewToggle = document.getElementById("preview-toggle");
 
       previewCanvas.addEventListener("pointerdown", (event) => {
         previewDown = true;
@@ -774,6 +764,10 @@
       });
 
       document.getElementById("preview-clear").addEventListener("click", clearPreview);
+      previewToggle.addEventListener("click", () => {
+        const isHidden = previewPanel.classList.toggle("hidden");
+        previewToggle.textContent = isHidden ? "Afficher la zone de test" : "Masquer la zone de test";
+      });
     }
 
     function clearPreview() {
@@ -1102,6 +1096,11 @@
       const x = p.x;
       const y = p.y;
 
+      if (y > paper.height) {
+        lx = x;
+        ly = y;
+        return;
+      }
       if (lx !== undefined && phase === "DRAWING") {
         const life = remainingTime / timeLimit;
         drawSpectralBrush(ctxP, lx, ly, x, y, life);
