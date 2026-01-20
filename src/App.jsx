@@ -68,6 +68,7 @@ export default function App() {
     const MIN_BRUSH_SCALE = 0.12;
     let brushSizeScale = 1;
     let opacityScale = 1;
+    let inkLoadScale = 1;
     let zoomLevel = 1;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
@@ -148,6 +149,23 @@ export default function App() {
       ctx.restore();
     };
 
+    const addDrip = (ctx, cx, cy, length, baseRgb, intensity) => {
+      const dripLength = Math.max(6, length);
+      const dripWidth = Math.max(1.5, length * 0.18);
+      const grad = ctx.createLinearGradient(cx, cy, cx, cy + dripLength);
+      grad.addColorStop(0, rgba(baseRgb, 0.18 * intensity * opacityScale));
+      grad.addColorStop(1, rgba(baseRgb, 0));
+      ctx.save();
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = dripWidth;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx, cy + dripLength);
+      ctx.stroke();
+      ctx.restore();
+    };
+
     const drawPetalStamp = (ctx, cx, cy, size, angle, color, alpha) => {
       ctx.save();
       ctx.translate(cx, cy);
@@ -195,6 +213,7 @@ export default function App() {
       const pressure = 1.0 - speed * 0.6;
       const whisper = localEnergy.rms < 0.18;
       const brush = activeBrush;
+      const inkLoad = clamp(inkLoadScale, 0.5, 1.8);
       const baseRgb = hexToRgb(activeInk.value);
       const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.35);
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
@@ -219,7 +238,7 @@ export default function App() {
       const sizeResponse = clamp(0.25 + brushSizeScale * 0.85, 0.25, 1.15);
       const audioBoost = clamp(0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6, 0.35, 1.6);
       const bandBoost = clamp((localBands.low + localBands.mid + localBands.high) / 1.2, 0, 1);
-      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4);
+      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4) * (1 - inkLoad * 0.12);
 
       for (let i = 0; i <= steps; i += 1) {
         const t = i / steps;
@@ -229,30 +248,34 @@ export default function App() {
         cx += (Math.random() - 0.5) * jitterBase;
         cy += (Math.random() - 0.5) * jitterBase;
 
+        const strokeTaper = Math.sin(Math.PI * t);
+        const flowScale = clamp(brush.flow * inkLoad, 0.2, 1.9);
+        const strokeAlpha = (0.3 + strokeTaper * 0.9) * flowScale * opacityScale;
+
         if (brush.style === "mist") {
-          const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.08 * brush.flow * opacityScale);
+          const washSize = (brush.baseSize * brushSizeScale * 1.9 + localBands.low * 18) * pressure * sizeResponse * (0.8 + inkLoad * 0.35);
+          ctx.fillStyle = rgba(mistRgb, 0.08 * strokeAlpha);
           ctx.beginPath();
           ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
 
           if (Math.random() < 0.15 + bandBoost * 0.4) {
-            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, 0.4 + bandBoost * 0.5);
+            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost) * (0.9 + inkLoad * 0.4), baseRgb, (0.4 + bandBoost * 0.5) * inkLoad);
           }
         }
 
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
-          const alphaBase = (0.1 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * opacityScale;
+          const alphaBase = (0.12 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * flowScale * opacityScale * (0.55 + strokeTaper * 0.65);
 
           for (let b = 0; b < bristles; b += 1) {
             if (Math.random() < brush.grain * 0.2) continue;
             const spread = (Math.random() - 0.5) * rakeWidth * brush.spread * 2;
             const mx = cx + nx * spread;
             const my = cy + ny * spread;
-            const length = (3 + Math.random() * 8 + localBands.low * 12) * sizeResponse;
-            const width = (0.4 + Math.random() * 0.6) * sizeResponse;
+            const length = (3 + Math.random() * 8 + localBands.low * 12) * sizeResponse * (0.9 + inkLoad * 0.25);
+            const width = (0.4 + Math.random() * 0.6) * sizeResponse * (0.8 + strokeTaper * 0.5);
             ctx.strokeStyle = rgba(deepRgb, alphaBase * (0.6 + Math.random() * 0.5));
             ctx.lineWidth = width;
             ctx.beginPath();
@@ -272,14 +295,14 @@ export default function App() {
               ctx,
               cx + nx * offset,
               cy + ny * offset,
-              baseSize * (0.8 + Math.random() * 0.6),
+              baseSize * (0.8 + Math.random() * 0.6) * (0.85 + inkLoad * 0.3),
               angle,
               baseRgb,
-              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * flowScale * opacityScale * (0.6 + strokeTaper * 0.6)
             );
           }
           if (Math.random() < 0.2 + bandBoost * 0.3) {
-            addStain(ctx, cx, cy, baseSize * 1.2, baseRgb, 0.4 + bandBoost * 0.4);
+            addStain(ctx, cx, cy, baseSize * 1.2 * (0.85 + inkLoad * 0.35), baseRgb, (0.4 + bandBoost * 0.4) * inkLoad);
           }
         }
 
@@ -293,28 +316,28 @@ export default function App() {
               ctx,
               cx + nx * offset,
               cy + ny * offset,
-              baseSize * (0.7 + Math.random() * 0.6),
+              baseSize * (0.7 + Math.random() * 0.6) * (0.85 + inkLoad * 0.25),
               angle,
               deepRgb,
-              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * flowScale * opacityScale * (0.6 + strokeTaper * 0.6)
             );
           }
         }
 
         if (brush.style === "spark") {
           const burst = Math.max(localBands.high, localEnergy.peak);
-          const sparkCount = 2 + Math.floor(burst * 6);
+          const sparkCount = 1 + Math.floor(burst * 4 * (1.1 - inkLoad * 0.2));
           for (let s = 0; s < sparkCount; s += 1) {
             const angle = Math.random() * Math.PI * 2;
             const length = (4 + Math.random() * 12) * (0.5 + burst) * sizeResponse;
-            drawSpark(ctx, cx, cy, length, angle, mistRgb, 0.35 + burst * 0.5, 0.4 + Math.random() * 0.8);
+            drawSpark(ctx, cx, cy, length, angle, mistRgb, 0.3 + burst * 0.4, 0.4 + Math.random() * 0.8);
           }
-          if (Math.random() < 0.5 + burst * 0.4) {
+          if (Math.random() < 0.4 + burst * 0.35) {
             const scatter = (8 + burst * 22) * brush.spread;
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.5 + Math.random() * (1 + burst * 1.2)) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale);
+            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale * (0.7 + inkLoad * 0.4));
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
@@ -323,13 +346,13 @@ export default function App() {
 
         if (whisper && brush.style !== "mist") {
           const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * opacityScale);
+          ctx.fillStyle = rgba(mistRgb, 0.05 * flowScale * opacityScale);
           ctx.beginPath();
           ctx.ellipse(cx, cy, hazeSize, hazeSize * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
         }
 
-        const splashIntensity = Math.max(localBands.high, localEnergy.peak);
+        const splashIntensity = Math.max(localBands.high, localEnergy.peak) * (0.9 + inkLoad * 0.3);
         if (splashIntensity > 0.08) {
           if (Math.random() < 0.25 + splashIntensity * 0.6) {
             const scatter = (6 + splashIntensity * 24) * brush.spread;
@@ -350,9 +373,14 @@ export default function App() {
           }
 
           if (localEnergy.peak > 0.18 && Math.random() < 0.5) {
-            addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
-            addStain(ctx, cx, cy, 14 + localEnergy.peak * 26, baseRgb, localEnergy.peak);
+            addSplatter(ctx, cx, cy, localEnergy.peak * inkLoad, baseRgb);
+            addStain(ctx, cx, cy, (14 + localEnergy.peak * 26) * (0.85 + inkLoad * 0.4), baseRgb, localEnergy.peak * inkLoad);
           }
+        }
+
+        const bleed = clamp((inkLoad - 1) * 0.9 + localBands.low * 0.2, 0, 1);
+        if (bleed > 0.08 && Math.random() < bleed * 0.2) {
+          addDrip(ctx, cx, cy, 12 + bleed * 30, baseRgb, bleed);
         }
       }
 
@@ -473,6 +501,24 @@ export default function App() {
       return () => {
         sizeRange.removeEventListener("input", onInput);
         sizeRange.removeEventListener("change", onInput);
+      };
+    };
+
+    const setupInkLoadControls = () => {
+      const inkRange = document.getElementById("ink-range");
+      const inkValue = document.getElementById("ink-value");
+      const updateInkLoad = (value) => {
+        const numeric = parseFloat(value);
+        inkLoadScale = clamp(numeric, 0.5, 1.6);
+        inkValue.textContent = `${Math.round(inkLoadScale * 100)}%`;
+      };
+      const onInput = (event) => updateInkLoad(event.target.value);
+      inkRange.addEventListener("input", onInput);
+      inkRange.addEventListener("change", onInput);
+      updateInkLoad(inkRange.value);
+      return () => {
+        inkRange.removeEventListener("input", onInput);
+        inkRange.removeEventListener("change", onInput);
       };
     };
 
@@ -788,12 +834,12 @@ export default function App() {
           finishRitual();
           return;
         }
-        mainBtn.innerText = "Cycle suivant";
+        mainBtn.innerText = "Kiai suivant";
         mainBtn.style.display = "block";
         secBtn.style.display = "none";
         statusText.innerText = `Respiration — prochain cycle ${cycleIndex + 1}/3`;
       } else {
-        mainBtn.innerText = "Nouveau Cycle";
+        mainBtn.innerText = "Relancer Kiai";
         mainBtn.style.display = "block";
         secBtn.style.display = "block";
         statusText.innerText = "Pause. Ajoutez ou terminez.";
@@ -827,7 +873,7 @@ export default function App() {
       recordedChunks = [];
       cycleIndex = 0;
 
-      mainBtn.innerText = "Lancer le cycle";
+      mainBtn.innerText = "Kiai";
       mainBtn.style.display = "block";
       secBtn.style.display = "none";
 
@@ -915,6 +961,7 @@ export default function App() {
 
     const cleanupPreview = setupPreviewCanvas();
     const cleanupSize = setupBrushSizeControls();
+    const cleanupInk = setupInkLoadControls();
     const cleanupPanel = setupPanelInteractions();
     setupControls();
     resizeCanvas();
@@ -929,6 +976,7 @@ export default function App() {
       cleanupPreview();
       cleanupSize();
       cleanupPanel();
+      cleanupInk();
       stopCountdown();
       initBtn.removeEventListener("click", onInitClick);
       closeReplayBtn.removeEventListener("click", onCloseReplay);
@@ -985,7 +1033,7 @@ export default function App() {
           </div>
 
           <div className="action-area">
-            <button id="main-btn" className="main-btn">Lancer le cycle</button>
+            <button id="main-btn" className="main-btn kiai-btn">Kiai</button>
             <button id="secondary-btn" className="main-btn secondary" style={{ display: "none" }}>Terminer l'oeuvre</button>
           </div>
         </div>
@@ -1018,6 +1066,13 @@ export default function App() {
                 <div className="size-row">
                   <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
                   <span id="size-value" className="size-value">100%</span>
+                </div>
+              </div>
+              <div className="control-group inline">
+                <div className="control-label">Charge d&apos;encre</div>
+                <div className="size-row">
+                  <input id="ink-range" type="range" min="0.5" max="1.6" step="0.05" defaultValue="1" />
+                  <span id="ink-value" className="size-value">100%</span>
                 </div>
               </div>
               <div className="control-group inline">
