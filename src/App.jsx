@@ -712,7 +712,7 @@ export default function App() {
       exportMenu.classList.toggle("active");
     };
     const onMainClick = () => {
-      if (phase === "READY") startCycle();
+      if (phase === "READY" || phase === "FINISHED") startCycle();
     };
 
     const onStop = () => {
