@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 
 const brushes = [
-  { id: "kasane", name: "Kasane", baseSize: 18, bristles: 18, spread: 1.1, flow: 0.7, jitter: 0.6, grain: 0.35 },
-  { id: "kasure", name: "Kasure", baseSize: 12, bristles: 10, spread: 1.8, flow: 0.35, jitter: 0.4, grain: 0.75 },
-  { id: "bokashi", name: "Bokashi", baseSize: 26, bristles: 8, spread: 1.3, flow: 0.25, jitter: 0.2, grain: 0.2 },
-  { id: "hayai", name: "Hayai", baseSize: 10, bristles: 14, spread: 0.8, flow: 0.55, jitter: 0.9, grain: 0.45 },
-  { id: "tsubu", name: "Tsubu", baseSize: 14, bristles: 6, spread: 2.1, flow: 0.4, jitter: 0.5, grain: 0.9 }
+  { id: "kasane", name: "Kasane", baseSize: 9, bristles: 16, spread: 1.1, flow: 0.65, jitter: 0.5, grain: 0.35 },
+  { id: "kasure", name: "Kasure", baseSize: 7, bristles: 10, spread: 1.6, flow: 0.35, jitter: 0.35, grain: 0.75 },
+  { id: "bokashi", name: "Bokashi", baseSize: 11, bristles: 7, spread: 1.25, flow: 0.25, jitter: 0.2, grain: 0.2 },
+  { id: "hayai", name: "Hayai", baseSize: 6, bristles: 12, spread: 0.8, flow: 0.55, jitter: 0.8, grain: 0.45 },
+  { id: "tsubu", name: "Tsubu", baseSize: 8, bristles: 6, spread: 1.8, flow: 0.4, jitter: 0.45, grain: 0.9 }
 ];
 
 const inkPalette = [
@@ -64,8 +64,11 @@ export default function App() {
     let isDown = false;
     let lx;
     let ly;
+    const CANVAS_SCALE = 3;
+    const MIN_BRUSH_SCALE = 0.12;
     let brushSizeScale = 1;
     let opacityScale = 1;
+    let zoomLevel = 1;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -106,8 +109,8 @@ export default function App() {
 
     const resizeCanvas = () => {
       const rect = canvasWrap.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width));
-      const height = Math.max(1, Math.floor(rect.height));
+      const width = Math.max(1, Math.floor(rect.width * CANVAS_SCALE));
+      const height = Math.max(1, Math.floor(rect.height * CANVAS_SCALE));
       if (paper.width === width && paper.height === height) return;
       paper.width = width;
       paper.height = height;
@@ -131,7 +134,7 @@ export default function App() {
     };
 
     const addStain = (ctx, cx, cy, size, baseRgb, intensity) => {
-      const radius = Math.max(12, size);
+      const radius = Math.max(6, size);
       const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius);
       grad.addColorStop(0, rgba(baseRgb, 0.2 * intensity * opacityScale));
       grad.addColorStop(0.6, rgba(baseRgb, 0.08 * intensity * opacityScale));
@@ -174,8 +177,9 @@ export default function App() {
         ny = dx / len;
       }
 
-      const audioBoost = 1 + localEnergy.rms * 0.9 + localEnergy.peak * 1.1;
-      const jitterBase = (localBands.high * 10 + localEnergy.rms * 10) * brush.jitter * audioBoost;
+      const sizeResponse = clamp(0.05 + brushSizeScale * 0.95, 0.05, 1);
+      const audioBoost = 1 + localEnergy.rms * 0.65 * sizeResponse + localEnergy.peak * 0.8 * sizeResponse;
+      const jitterBase = (localBands.high * 6 + localEnergy.rms * 7) * brush.jitter * audioBoost * sizeResponse;
 
       for (let i = 0; i <= steps; i += 1) {
         const t = i / steps;
@@ -186,36 +190,38 @@ export default function App() {
         cy += (Math.random() - 0.5) * jitterBase;
 
         if (whisper) {
-          const washSize = (brush.baseSize * brushSizeScale * 1.9 + localBands.low * 20) * pressure;
-          ctx.fillStyle = rgba(mistRgb, 0.1 * brush.flow * opacityScale);
+          const washSize = (brush.baseSize * brushSizeScale * 1.2 + localBands.low * 10 * sizeResponse) * pressure;
+          ctx.fillStyle = rgba(mistRgb, 0.08 * brush.flow * opacityScale);
           ctx.beginPath();
           ctx.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
         }
 
         if (localBands.low > 0.03) {
-          const offset = (Math.random() - 0.5) * 20 * localBands.low * brush.spread;
+          const lowBand = localBands.low * sizeResponse;
+          const offset = (Math.random() - 0.5) * 14 * lowBand * brush.spread;
           const bx = cx + nx * offset;
           const by = cy + ny * offset;
 
-          const size = (brush.baseSize * brushSizeScale * 0.6 + localBands.low * 26) * pressure * audioBoost;
-          const alpha = 0.1 * localBands.low * brush.flow * (whisper ? 0.5 : 1) * opacityScale;
+          const size = (brush.baseSize * brushSizeScale * 0.35 + lowBand * 8) * pressure * audioBoost;
+          const alpha = 0.07 * lowBand * brush.flow * (whisper ? 0.5 : 1) * opacityScale;
 
           ctx.fillStyle = rgba(deepRgb, alpha);
           ctx.beginPath();
           ctx.ellipse(bx, by, size, size * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
 
-          if (Math.random() < 0.08 * localBands.low) {
-            const stainSize = size * (1.6 + localBands.low);
-            addStain(ctx, bx, by, stainSize, baseRgb, localBands.low * 0.6);
+          if (Math.random() < 0.08 * lowBand) {
+            const stainSize = size * (1.4 + lowBand);
+            addStain(ctx, bx, by, stainSize, baseRgb, lowBand * 0.6);
           }
         }
 
         if (localBands.mid > 0.02) {
+          const midBand = localBands.mid * sizeResponse;
           const widthBoost = whisper ? 1.5 : 1;
-          const brushWidth = (brush.baseSize * brushSizeScale * brush.spread + localBands.mid * 22) * pressure * widthBoost * audioBoost;
-          const bristles = Math.max(6, Math.round(brush.bristles + localBands.mid * 12));
+          const brushWidth = (brush.baseSize * brushSizeScale * brush.spread + midBand * 8) * pressure * widthBoost * audioBoost;
+          const bristles = Math.max(6, Math.round(brush.bristles + midBand * 8));
 
           for (let b = 0; b < bristles; b += 1) {
             const spread = (Math.random() - 0.5) * brushWidth * 2;
@@ -225,9 +231,9 @@ export default function App() {
             const mx = cx + nx * spread;
             const my = cy + ny * spread;
 
-            const size = (0.6 + Math.random()) * pressure * (whisper ? 0.8 : 1) * brushSizeScale;
+            const size = (0.4 + Math.random() * 0.8) * pressure * (whisper ? 0.8 : 1) * brushSizeScale;
 
-            let alpha = 0.6 * localBands.mid * brush.flow;
+            let alpha = 0.5 * midBand * brush.flow;
             if (whisper) alpha *= 0.45;
             alpha *= opacityScale;
 
@@ -240,14 +246,14 @@ export default function App() {
           }
         }
 
-        const splashIntensity = Math.max(localBands.high, localEnergy.peak);
+        const splashIntensity = Math.max(localBands.high * sizeResponse, localEnergy.peak * sizeResponse);
         if (splashIntensity > 0.1) {
           if (Math.random() < 0.3 + splashIntensity * 0.6) {
-            const scatter = (8 + splashIntensity * 40) * brush.spread;
+            const scatter = (6 + splashIntensity * 28) * brush.spread;
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
 
-            const size = (0.6 + Math.random() * (1 + splashIntensity)) * brushSizeScale;
+            const size = (0.4 + Math.random() * (0.8 + splashIntensity)) * brushSizeScale;
             const alpha = 0.75 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
 
             ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
@@ -257,10 +263,10 @@ export default function App() {
           }
 
           if (Math.random() < 0.12 * splashIntensity) {
-            const len = 14 * splashIntensity;
+            const len = 10 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
             ctx.strokeStyle = rgba(mistRgb, 0.5 * splashIntensity * opacityScale);
-            ctx.lineWidth = 0.6;
+            ctx.lineWidth = 0.5;
             ctx.beginPath();
             ctx.moveTo(cx, cy);
             ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
@@ -269,7 +275,7 @@ export default function App() {
 
           if (localEnergy.peak > 0.2 && Math.random() < 0.6) {
             addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
-            addStain(ctx, cx, cy, 22 + localEnergy.peak * 40, baseRgb, localEnergy.peak);
+            addStain(ctx, cx, cy, 16 + localEnergy.peak * 28, baseRgb, localEnergy.peak);
           }
         }
       }
@@ -379,14 +385,19 @@ export default function App() {
       const sizeValue = document.getElementById("size-value");
       const updateSizing = (value) => {
         const numeric = parseFloat(value);
-        brushSizeScale = numeric;
-        opacityScale = clamp(1.4 - brushSizeScale * 0.5, 0.6, 1.2);
-        sizeValue.textContent = `${Math.round(brushSizeScale * 100)}%`;
+        const normalized = clamp(numeric, 0, 1.2);
+        brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
+        opacityScale = clamp(1.05 - brushSizeScale * 0.25, 0.5, 1);
+        sizeValue.textContent = `${Math.round(normalized * 100)}%`;
       };
       const onInput = (event) => updateSizing(event.target.value);
       sizeRange.addEventListener("input", onInput);
+      sizeRange.addEventListener("change", onInput);
       updateSizing(sizeRange.value);
-      return () => sizeRange.removeEventListener("input", onInput);
+      return () => {
+        sizeRange.removeEventListener("input", onInput);
+        sizeRange.removeEventListener("change", onInput);
+      };
     };
 
     const setupPanelInteractions = () => {
@@ -580,9 +591,11 @@ export default function App() {
 
     const getPointerPos = (event) => {
       const rect = paper.getBoundingClientRect();
+      const scaleX = paper.width / rect.width;
+      const scaleY = paper.height / rect.height;
       return {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
       };
     };
 
@@ -775,6 +788,7 @@ export default function App() {
     const closeReplayBtn = document.getElementById("close-replay-btn");
     const resetBtn = document.getElementById("reset-btn");
     const saveBtn = document.getElementById("save-btn");
+    const zoomBtn = document.getElementById("zoom-btn");
 
     const onSave = () => {
       const a = document.createElement("a");
@@ -784,6 +798,17 @@ export default function App() {
     };
 
     const preventTouch = (event) => event.preventDefault();
+
+    const updateZoom = (nextZoom) => {
+      zoomLevel = nextZoom;
+      canvasWrap.style.setProperty("--canvas-zoom", zoomLevel.toString());
+      zoomBtn.classList.toggle("active", zoomLevel > 1);
+      zoomBtn.title = zoomLevel > 1 ? "Zoom arrière" : "Zoom avant";
+    };
+
+    const onZoomToggle = () => {
+      updateZoom(zoomLevel > 1 ? 1 : 1.5);
+    };
 
     const onCloseReplay = () => {
       document.getElementById("replay-overlay").classList.remove("active");
@@ -803,6 +828,7 @@ export default function App() {
     closeReplayBtn.addEventListener("click", onCloseReplay);
     resetBtn.addEventListener("click", resetRitual);
     saveBtn.addEventListener("click", onSave);
+    zoomBtn.addEventListener("click", onZoomToggle);
     mainBtn.addEventListener("click", onMainClick);
     secBtn.addEventListener("click", onSecondaryClick);
 
@@ -817,6 +843,7 @@ export default function App() {
     setupControls();
     resizeCanvas();
     updateCycleStatus();
+    updateZoom(1);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -831,6 +858,7 @@ export default function App() {
       closeReplayBtn.removeEventListener("click", onCloseReplay);
       resetBtn.removeEventListener("click", resetRitual);
       saveBtn.removeEventListener("click", onSave);
+      zoomBtn.removeEventListener("click", onZoomToggle);
       mainBtn.removeEventListener("click", onMainClick);
       secBtn.removeEventListener("click", onSecondaryClick);
       paper.removeEventListener("pointerdown", handleDown);
@@ -891,6 +919,7 @@ export default function App() {
         <div className="tools-row">
           <button id="reset-btn" className="btn-circle" title="Tout effacer">↺</button>
           <button id="save-btn" className="btn-circle" title="Image PNG">↓</button>
+          <button id="zoom-btn" className="btn-circle" title="Zoom avant">🔍</button>
         </div>
 
         <div className="tools-panels">
@@ -911,7 +940,7 @@ export default function App() {
               <div className="control-group inline">
                 <div className="control-label">Taille du tracé</div>
                 <div className="size-row">
-                  <input id="size-range" type="range" min="0.6" max="1.6" step="0.05" defaultValue="1" />
+                  <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
                   <span id="size-value" className="size-value">100%</span>
                 </div>
               </div>
