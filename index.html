@@ -189,6 +189,67 @@
       font-size: 1rem;
     }
 
+    .advanced-panel {
+      pointer-events: auto;
+      align-self: center;
+      margin-top: 10px;
+      padding: 12px 16px;
+      background: var(--ui-bg);
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 14px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      width: min(320px, 90vw);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+
+    .advanced-panel.active { display: flex; }
+
+    .advanced-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.25em;
+      color: var(--indigo);
+    }
+
+    .advanced-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .pad-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 8px;
+    }
+
+    .pad-btn {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.2);
+      background: rgba(255,255,255,0.6);
+      color: var(--ink);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      cursor: pointer;
+    }
+
+    .pad-btn.playing {
+      background: var(--ink);
+      color: var(--bg);
+    }
+
+    .small-status {
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.6);
+    }
+
     #boot-screen {
       position: fixed;
       inset: 0;
@@ -313,6 +374,16 @@
     <div class="bottom-ui">
       <div id="reset-btn" class="btn-circle" title="Tout effacer">↺</div>
       <div id="save-btn" class="btn-circle" title="Image PNG">↓</div>
+      <div id="advanced-btn" class="btn-circle" title="Options avancées">⚙︎</div>
+    </div>
+
+    <div id="advanced-panel" class="advanced-panel">
+      <div class="advanced-title">Options avancées</div>
+      <div class="advanced-row">
+        <div class="small-status" id="sample-status">Recorder 5s prêt</div>
+        <button id="sample-rec-btn" class="main-btn secondary" style="min-width: auto; padding: 8px 12px;">Recorder 5s</button>
+      </div>
+      <div class="pad-grid" id="sample-pad-grid"></div>
     </div>
   </div>
 
@@ -343,6 +414,11 @@
     let mediaRecorder;
     let recordedChunks = [];
     let isRecording = false;
+
+    let sampleRecorder;
+    let sampleChunks = [];
+    let sampleCount = 0;
+    const samplePads = [];
 
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
@@ -640,6 +716,11 @@
     const recDot = document.getElementById("rec-dot");
     const timerContainer = document.getElementById("timer-container");
     const specViz = document.getElementById("spectrum-viz");
+    const advancedBtn = document.getElementById("advanced-btn");
+    const advancedPanel = document.getElementById("advanced-panel");
+    const sampleRecBtn = document.getElementById("sample-rec-btn");
+    const sampleStatus = document.getElementById("sample-status");
+    const samplePadGrid = document.getElementById("sample-pad-grid");
 
     mainBtn.onclick = () => {
       if (phase === "HUMIDIFY" || phase === "PAUSED") {
@@ -673,6 +754,14 @@
     document.getElementById("close-replay-btn").onclick = () => {
       document.getElementById("replay-overlay").classList.remove("active");
       recordedChunks = [];
+    };
+
+    advancedBtn.onclick = () => {
+      advancedPanel.classList.toggle("active");
+    };
+
+    sampleRecBtn.onclick = () => {
+      startSampleRecording();
     };
 
     function startCycle() {
@@ -744,6 +833,56 @@
       timerContainer.style.opacity = 0;
       statusText.innerText = "1. Humidifier le papier";
       recDot.classList.remove("active");
+    }
+
+    function startSampleRecording() {
+      if (!mediaStream) {
+        sampleStatus.innerText = "Activez le micro d'abord.";
+        return;
+      }
+
+      if (!sampleRecorder) {
+        sampleRecorder = new MediaRecorder(mediaStream);
+        sampleRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) sampleChunks.push(event.data);
+        };
+
+        sampleRecorder.onstop = () => {
+          const blob = new Blob(sampleChunks, { type: sampleChunks[0] ? sampleChunks[0].type : "audio/webm" });
+          sampleChunks = [];
+          const url = URL.createObjectURL(blob);
+          sampleCount += 1;
+          const label = `Pad ${sampleCount}`;
+          const padBtn = document.createElement("button");
+          padBtn.className = "pad-btn";
+          padBtn.textContent = label;
+          padBtn.onclick = () => {
+            const audio = new Audio(url);
+            padBtn.classList.add("playing");
+            audio.onended = () => padBtn.classList.remove("playing");
+            audio.play();
+          };
+          samplePads.push({ label, url });
+          samplePadGrid.appendChild(padBtn);
+          sampleStatus.innerText = `${label} prêt.`;
+          sampleRecBtn.disabled = false;
+          sampleRecBtn.innerText = "Recorder 5s";
+        };
+      }
+
+      if (sampleRecorder.state === "recording") return;
+
+      sampleStatus.innerText = "Enregistrement 5s...";
+      sampleRecBtn.disabled = true;
+      sampleRecBtn.innerText = "En cours...";
+      sampleChunks = [];
+      sampleRecorder.start();
+
+      setTimeout(() => {
+        if (sampleRecorder && sampleRecorder.state === "recording") {
+          sampleRecorder.stop();
+        }
+      }, 5000);
     }
 
     function loop() {
