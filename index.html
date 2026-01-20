@@ -148,6 +148,74 @@
       gap: 15px;
     }
 
+    .controls-panel {
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 16px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(6px);
+      border-radius: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .control-label {
+      font-size: 0.55rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(13,13,13,0.6);
+    }
+
+    .option-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+    }
+
+    .chip-btn {
+      border: 1px solid rgba(0,0,0,0.18);
+      background: rgba(255,255,255,0.9);
+      color: var(--ink);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      padding: 6px 10px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: all 0.2s ease;
+    }
+
+    .chip-btn.active {
+      border-color: var(--ink);
+      background: var(--ink);
+      color: var(--bg);
+    }
+
+    .color-chip {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.2);
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .color-chip.active {
+      transform: scale(1.1);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+    }
+
     .main-btn {
       padding: 12px 28px;
       border: 1px solid var(--ink);
@@ -308,6 +376,16 @@
     <div class="action-area">
       <button id="main-btn" class="main-btn">Lancer le cycle</button>
       <button id="secondary-btn" class="main-btn secondary" style="display:none;">Terminer l'oeuvre</button>
+      <div class="controls-panel">
+        <div class="control-group">
+          <div class="control-label">Pinceaux</div>
+          <div id="brush-options" class="option-row"></div>
+        </div>
+        <div class="control-group">
+          <div class="control-label">Encres</div>
+          <div id="color-options" class="option-row"></div>
+        </div>
+      </div>
     </div>
 
     <div class="bottom-ui">
@@ -339,12 +417,57 @@
 
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
+    const audioEnergy = { rms: 0, peak: 0 };
+    let lastPeakTime = 0;
 
     let mediaRecorder;
     let recordedChunks = [];
     let isRecording = false;
 
+    const brushes = [
+      { id: "kasane", name: "Kasane", baseSize: 18, bristles: 18, spread: 1.1, flow: 0.7, jitter: 0.6, grain: 0.35 },
+      { id: "kasure", name: "Kasure", baseSize: 12, bristles: 10, spread: 1.8, flow: 0.35, jitter: 0.4, grain: 0.75 },
+      { id: "bokashi", name: "Bokashi", baseSize: 26, bristles: 8, spread: 1.3, flow: 0.25, jitter: 0.2, grain: 0.2 },
+      { id: "hayai", name: "Hayai", baseSize: 10, bristles: 14, spread: 0.8, flow: 0.55, jitter: 0.9, grain: 0.45 },
+      { id: "tsubu", name: "Tsubu", baseSize: 14, bristles: 6, spread: 2.1, flow: 0.4, jitter: 0.5, grain: 0.9 }
+    ];
+
+    const inkPalette = [
+      { id: "sumi", name: "Sumi Noir", value: "#14110f" },
+      { id: "sumi-warm", name: "Sumi Chaud", value: "#2a1d18" },
+      { id: "ai", name: "Aï Indigo", value: "#2c3b52" },
+      { id: "shu", name: "Shu Vermillon", value: "#b73a26" },
+      { id: "kokutan", name: "Kokutan", value: "#1b1a16" },
+      { id: "matsu", name: "Matsu", value: "#2c3a2f" }
+    ];
+
+    let activeBrush = brushes[0];
+    let activeInk = inkPalette[0];
+    let timeData;
+
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function hexToRgb(hex) {
+      const clean = hex.replace("#", "");
+      const intVal = parseInt(clean, 16);
+      return {
+        r: (intVal >> 16) & 255,
+        g: (intVal >> 8) & 255,
+        b: intVal & 255
+      };
+    }
+
+    function mixColor(rgb, target, amount) {
+      return {
+        r: Math.round(rgb.r + (target.r - rgb.r) * amount),
+        g: Math.round(rgb.g + (target.g - rgb.g) * amount),
+        b: Math.round(rgb.b + (target.b - rgb.b) * amount)
+      };
+    }
+
+    function rgba(rgb, alpha) {
+      return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+    }
 
     function initCanvasSize() {
       const w = window.innerWidth;
@@ -373,6 +496,42 @@
       ctxM.fillRect(0, 0, mask.width, mask.height);
     }
 
+    function setupControls() {
+      const brushContainer = document.getElementById("brush-options");
+      const colorContainer = document.getElementById("color-options");
+      brushContainer.innerHTML = "";
+      colorContainer.innerHTML = "";
+
+      brushes.forEach((brush, index) => {
+        const btn = document.createElement("button");
+        btn.className = "chip-btn";
+        btn.textContent = brush.name;
+        btn.dataset.brushId = brush.id;
+        if (index === 0) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          activeBrush = brush;
+          [...brushContainer.querySelectorAll(".chip-btn")].forEach(el => el.classList.remove("active"));
+          btn.classList.add("active");
+        });
+        brushContainer.appendChild(btn);
+      });
+
+      inkPalette.forEach((ink, index) => {
+        const chip = document.createElement("button");
+        chip.className = "color-chip";
+        chip.style.background = ink.value;
+        chip.title = ink.name;
+        chip.dataset.inkId = ink.id;
+        if (index === 0) chip.classList.add("active");
+        chip.addEventListener("click", () => {
+          activeInk = ink;
+          [...colorContainer.querySelectorAll(".color-chip")].forEach(el => el.classList.remove("active"));
+          chip.classList.add("active");
+        });
+        colorContainer.appendChild(chip);
+      });
+    }
+
     async function startAudio() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -384,6 +543,7 @@
         analyser.smoothingTimeConstant = 0.3;
         audioCtx.createMediaStreamSource(stream).connect(analyser);
         data = new Uint8Array(analyser.frequencyBinCount);
+        timeData = new Uint8Array(analyser.fftSize);
 
         setupRecorder();
 
@@ -440,6 +600,7 @@
     function audioLoop() {
       if (!analyser) return requestAnimationFrame(audioLoop);
       analyser.getByteFrequencyData(data);
+      analyser.getByteTimeDomainData(timeData);
 
       const binCount = data.length;
       const lowLimit = Math.floor(binCount * 0.08);
@@ -463,6 +624,22 @@
       bands.low += (clamp(rawL, 0, 1) - bands.low) * 0.2;
       bands.mid += (clamp(rawM, 0, 1) - bands.mid) * 0.2;
       bands.high += (clamp(rawH, 0, 1) - bands.high) * 0.15;
+
+      let sum = 0;
+      for (let i = 0; i < timeData.length; i++) {
+        const v = (timeData[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / timeData.length);
+      const normalized = clamp((rms - 0.02) / 0.28, 0, 1);
+      audioEnergy.rms += (normalized - audioEnergy.rms) * 0.2;
+
+      const now = performance.now();
+      if (normalized > 0.32 && now - lastPeakTime > 120) {
+        audioEnergy.peak = 1;
+        lastPeakTime = now;
+      }
+      audioEnergy.peak = Math.max(0, audioEnergy.peak - 0.08);
 
       if (phase === "DRAWING") {
         document.getElementById("spec-low").style.transform = `scaleY(${bands.low})`;
@@ -492,14 +669,19 @@
     }
 
     function drawSpectralBrush(x1, y1, x2, y2, life) {
-      const totalVol = bands.low + bands.mid + bands.high;
+      const totalVol = bands.low + bands.mid + bands.high + audioEnergy.rms;
       if (totalVol < SILENCE_THRESHOLD) return;
 
       const dist = Math.hypot(x2 - x1, y2 - y1);
       const steps = Math.max(1, Math.floor(dist));
 
       const speed = clamp(dist / 10, 0, 1);
-      const pressure = 1.0 - (speed * 0.7);
+      const pressure = 1.0 - (speed * 0.6);
+      const whisper = audioEnergy.rms < 0.18;
+      const brush = activeBrush;
+      const baseRgb = hexToRgb(activeInk.value);
+      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.35);
+      const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
       ctxP.save();
       ctxP.globalCompositeOperation = "multiply";
@@ -516,79 +698,116 @@
         ny = dx / len;
       }
 
+      const jitterBase = (bands.high * 8 + audioEnergy.rms * 6) * brush.jitter;
+
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const cx = x1 + (x2 - x1) * t;
-        const cy = y1 + (y2 - y1) * t;
+        let cx = x1 + (x2 - x1) * t;
+        let cy = y1 + (y2 - y1) * t;
 
-        if (bands.low > 0.05) {
-          const offset = (Math.random() - 0.5) * 15 * bands.low;
+        cx += (Math.random() - 0.5) * jitterBase;
+        cy += (Math.random() - 0.5) * jitterBase;
+
+        if (whisper) {
+          const washSize = (brush.baseSize * 1.8 + bands.low * 18) * pressure;
+          ctxP.fillStyle = rgba(mistRgb, 0.08 * brush.flow);
+          ctxP.beginPath();
+          ctxP.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctxP.fill();
+        }
+
+        if (bands.low > 0.03) {
+          const offset = (Math.random() - 0.5) * 18 * bands.low * brush.spread;
           const bx = cx + nx * offset;
           const by = cy + ny * offset;
 
-          const size = (5 + bands.low * 25) * pressure;
+          const size = (brush.baseSize * 0.6 + bands.low * 22) * pressure;
+          const alpha = (humid ? 0.03 : 0.08) * bands.low * brush.flow * (whisper ? 0.5 : 1);
 
-          const alpha = (humid ? 0.03 : 0.06) * bands.low;
-
-          ctxP.fillStyle = `rgba(37, 58, 79, ${alpha})`;
+          ctxP.fillStyle = rgba(deepRgb, alpha);
           ctxP.beginPath();
-          ctxP.ellipse(bx, by, size, size * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctxP.ellipse(bx, by, size, size * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
           ctxP.fill();
         }
 
         if (bands.mid > 0.02) {
-          const brushWidth = (3 + bands.mid * 12) * pressure;
-          const bristles = 12;
+          const widthBoost = whisper ? 1.5 : 1;
+          const brushWidth = (brush.baseSize * brush.spread + bands.mid * 18) * pressure * widthBoost;
+          const bristles = Math.max(6, Math.round(brush.bristles + bands.mid * 10));
 
           for (let b = 0; b < bristles; b++) {
             const spread = (Math.random() - 0.5) * brushWidth * 2;
 
-            if (speed > 0.5 && Math.random() > 0.4) continue;
+            if (speed > 0.6 && Math.random() > brush.flow) continue;
 
             const mx = cx + nx * spread;
             const my = cy + ny * spread;
 
-            const size = (0.5 + Math.random()) * pressure;
+            const size = (0.6 + Math.random()) * pressure * (whisper ? 0.8 : 1);
 
-            let alpha = 0.5 * bands.mid;
+            let alpha = 0.55 * bands.mid * brush.flow;
             if (humid) alpha *= 0.4;
+            if (whisper) alpha *= 0.45;
 
-            ctxP.fillStyle = `rgba(13, 13, 13, ${alpha})`;
+            if (Math.random() < brush.grain * 0.3) continue;
+
+            ctxP.fillStyle = rgba(baseRgb, alpha);
             ctxP.beginPath();
             ctxP.arc(mx, my, size, 0, Math.PI * 2);
             ctxP.fill();
           }
         }
 
-        if (bands.high > 0.08) {
-          if (Math.random() < 0.3) {
-            const scatter = (5 + bands.high * 30);
+        const splashIntensity = Math.max(bands.high, audioEnergy.peak);
+        if (splashIntensity > 0.1) {
+          if (Math.random() < 0.2 + splashIntensity * 0.5) {
+            const scatter = (6 + splashIntensity * 34) * brush.spread;
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
 
-            const size = 0.5 + Math.random();
-            const alpha = 0.6 * bands.high;
+            const size = 0.6 + Math.random() * (1 + splashIntensity);
+            const alpha = 0.7 * splashIntensity * (whisper ? 0.5 : 1);
 
-            ctxP.fillStyle = `rgba(201, 48, 30, ${alpha})`;
+            ctxP.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
             ctxP.beginPath();
             ctxP.arc(hx, hy, size, 0, Math.PI * 2);
             ctxP.fill();
           }
 
-          if (Math.random() < 0.05 * bands.high) {
-            const len = 10 * bands.high;
+          if (Math.random() < 0.08 * splashIntensity) {
+            const len = 12 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
-            ctxP.strokeStyle = `rgba(201, 48, 30, ${0.4 * bands.high})`;
+            ctxP.strokeStyle = rgba(mistRgb, 0.45 * splashIntensity);
             ctxP.lineWidth = 0.5;
             ctxP.beginPath();
             ctxP.moveTo(cx, cy);
             ctxP.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
             ctxP.stroke();
           }
+
+          if (audioEnergy.peak > 0.2 && Math.random() < 0.5) {
+            addSplatter(cx, cy, audioEnergy.peak, baseRgb);
+          }
         }
       }
 
       ctxP.restore();
+    }
+
+    function addSplatter(cx, cy, intensity, baseRgb) {
+      const drops = Math.ceil(6 * intensity);
+      for (let i = 0; i < drops; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 10 + Math.random() * 30 * intensity;
+        const sx = cx + Math.cos(angle) * radius;
+        const sy = cy + Math.sin(angle) * radius;
+        const size = 0.8 + Math.random() * 2.4 * intensity;
+        const alpha = 0.55 * intensity;
+        ctxP.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.15), alpha);
+        ctxP.beginPath();
+        ctxP.arc(sx, sy, size, 0, Math.PI * 2);
+        ctxP.fill();
+      }
     }
 
     function isWet(x, y) {
@@ -763,6 +982,7 @@
     }
 
     window.addEventListener("resize", initCanvasSize);
+    setupControls();
     initCanvasSize();
   </script>
 </body>
