@@ -37,7 +37,6 @@
       display: block;
     }
 
-    #water-layer { z-index: 10; pointer-events: none; opacity: 0.6; mix-blend-mode: overlay; }
     #paper-layer { z-index: 5; }
 
     .paper-texture {
@@ -224,6 +223,28 @@
       justify-content: center;
     }
 
+    .size-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .size-row input[type="range"] {
+      width: 140px;
+      accent-color: var(--ink);
+    }
+
+    .size-value {
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(13,13,13,0.7);
+      min-width: 48px;
+      text-align: right;
+    }
+
     .chip-btn {
       border: 1px solid rgba(0,0,0,0.18);
       background: rgba(255,255,255,0.9);
@@ -256,6 +277,16 @@
     .color-chip.active {
       transform: scale(1.1);
       box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+    }
+
+    #preview-canvas {
+      width: 180px;
+      height: 110px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.15);
+      background: rgba(255,255,255,0.7);
+      box-shadow: inset 0 0 14px rgba(0,0,0,0.06);
+      touch-action: none;
     }
 
     .main-btn {
@@ -395,13 +426,12 @@
 
   <div class="paper-texture"></div>
   <canvas id="paper-layer"></canvas>
-  <canvas id="water-layer"></canvas>
 
   <div id="ui-layer">
     <div class="top-ui">
       <div id="status-msg">
         <div id="rec-dot"></div>
-        <span id="status-text">1. Humidifier le papier</span>
+        <span id="status-text">Prêt à tracer</span>
       </div>
 
       <div id="timer-container">
@@ -441,6 +471,18 @@
         <div id="color-options" class="option-row"></div>
       </div>
       <div class="control-group">
+        <div class="control-label">Taille du tracé</div>
+        <div class="size-row">
+          <input id="size-range" type="range" min="0.6" max="1.6" step="0.05" value="1" />
+          <span id="size-value" class="size-value">100%</span>
+        </div>
+      </div>
+      <div class="control-group">
+        <div class="control-label">Test Pinceau</div>
+        <canvas id="preview-canvas" width="180" height="110"></canvas>
+        <button id="preview-clear" class="chip-btn" type="button">Effacer</button>
+      </div>
+      <div class="control-group">
         <div class="control-label">Cycle</div>
         <div id="cycle-options" class="option-row"></div>
       </div>
@@ -449,15 +491,10 @@
 
   <script>
     const paper = document.getElementById("paper-layer");
-    const water = document.getElementById("water-layer");
     const ctxP = paper.getContext("2d", { alpha: false });
-    const ctxW = water.getContext("2d");
-
-    const mask = document.createElement("canvas");
-    const ctxM = mask.getContext("2d", { willReadFrequently: true });
 
     let audioCtx, analyser, data, mediaStream;
-    let phase = "HUMIDIFY";
+    let phase = "READY";
 
     let startTime = 0;
     let timeLimit = 7000;
@@ -467,6 +504,8 @@
     let lx, ly;
     let lastW = 0;
     let lastH = 0;
+    let brushSizeScale = 1;
+    let opacityScale = 1;
 
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
@@ -500,6 +539,11 @@
     let cycleMode = "single";
     let cycleIndex = 0;
     const cycleDurations = [5000, 7000, 3000];
+    let previewCtx;
+    let previewCanvas;
+    let previewDown = false;
+    let previewLx;
+    let previewLy;
 
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
@@ -531,8 +575,8 @@
       if (Math.abs(w - lastW) < 50 && Math.abs(h - lastH) < 100) return;
       lastW = w;
       lastH = h;
-      paper.width = water.width = mask.width = w;
-      paper.height = water.height = mask.height = h;
+      paper.width = w;
+      paper.height = h;
       clearAll();
     }
 
@@ -546,10 +590,6 @@
         ctxP.fillRect(Math.random() * paper.width, Math.random() * paper.height, 1, 1);
       }
 
-      ctxW.clearRect(0, 0, water.width, water.height);
-      ctxM.clearRect(0, 0, mask.width, mask.height);
-      ctxM.fillStyle = "black";
-      ctxM.fillRect(0, 0, mask.width, mask.height);
     }
 
     function setupControls() {
@@ -611,6 +651,8 @@
       });
 
       setupPanelInteractions();
+      setupBrushSizeControls();
+      setupPreviewCanvas();
     }
 
     function setupPanelInteractions() {
@@ -655,6 +697,77 @@
       });
     }
 
+    function setupBrushSizeControls() {
+      const sizeRange = document.getElementById("size-range");
+      const sizeValue = document.getElementById("size-value");
+
+      const updateSizing = (value) => {
+        const numeric = parseFloat(value);
+        brushSizeScale = numeric;
+        opacityScale = clamp(1.4 - brushSizeScale * 0.5, 0.6, 1.2);
+        sizeValue.textContent = `${Math.round(brushSizeScale * 100)}%`;
+      };
+
+      sizeRange.addEventListener("input", (event) => updateSizing(event.target.value));
+      updateSizing(sizeRange.value);
+    }
+
+    function setupPreviewCanvas() {
+      previewCanvas = document.getElementById("preview-canvas");
+      previewCtx = previewCanvas.getContext("2d");
+      clearPreview();
+
+      previewCanvas.addEventListener("pointerdown", (event) => {
+        previewDown = true;
+        previewCanvas.setPointerCapture(event.pointerId);
+        previewLx = event.offsetX;
+        previewLy = event.offsetY;
+      });
+
+      previewCanvas.addEventListener("pointermove", (event) => {
+        if (!previewDown) return;
+        const x = event.offsetX;
+        const y = event.offsetY;
+        if (previewLx !== undefined) {
+          drawSpectralBrush(previewCtx, previewLx, previewLy, x, y, 1, getPreviewDrive());
+        }
+        previewLx = x;
+        previewLy = y;
+      });
+
+      previewCanvas.addEventListener("pointerup", (event) => {
+        previewDown = false;
+        previewCanvas.releasePointerCapture(event.pointerId);
+        previewLx = undefined;
+        previewLy = undefined;
+      });
+
+      document.getElementById("preview-clear").addEventListener("click", clearPreview);
+    }
+
+    function clearPreview() {
+      if (!previewCtx) return;
+      previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+      previewCtx.fillStyle = "rgba(255,255,255,0.8)";
+      previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+
+    function getPreviewDrive() {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 450);
+      return {
+        bands: {
+          low: clamp(0.25 + pulse * 0.25, 0, 1),
+          mid: clamp(0.35 + pulse * 0.3, 0, 1),
+          high: clamp(0.2 + pulse * 0.25, 0, 1)
+        },
+        energy: {
+          rms: clamp(0.45 + pulse * 0.25, 0, 1),
+          peak: clamp(0.2 + pulse * 0.35, 0, 1)
+        },
+        force: true
+      };
+    }
+
     function getCycleDuration() {
       if (cycleMode === "haiku") {
         return cycleDurations[cycleIndex] || cycleDurations[cycleDurations.length - 1];
@@ -666,7 +779,7 @@
       if (cycleMode === "haiku") {
         statusText.innerText = `Haïku — cycle ${cycleIndex + 1}/3`;
       } else {
-        statusText.innerText = "1. Humidifier le papier";
+        statusText.innerText = "Prêt à tracer";
       }
     }
 
@@ -755,13 +868,13 @@
         else h += v;
       }
 
-      const rawL = (l / lowLimit) * 2.0;
-      const rawM = (m / (midLimit - lowLimit)) * 2.5;
-      const rawH = (h / (binCount - midLimit)) * 5.0;
+      const rawL = (l / lowLimit) * 2.8;
+      const rawM = (m / (midLimit - lowLimit)) * 3.2;
+      const rawH = (h / (binCount - midLimit)) * 6.2;
 
-      bands.low += (clamp(rawL, 0, 1) - bands.low) * 0.2;
-      bands.mid += (clamp(rawM, 0, 1) - bands.mid) * 0.2;
-      bands.high += (clamp(rawH, 0, 1) - bands.high) * 0.15;
+      bands.low += (clamp(rawL, 0, 1) - bands.low) * 0.25;
+      bands.mid += (clamp(rawM, 0, 1) - bands.mid) * 0.25;
+      bands.high += (clamp(rawH, 0, 1) - bands.high) * 0.2;
 
       let sum = 0;
       for (let i = 0; i < timeData.length; i++) {
@@ -769,15 +882,15 @@
         sum += v * v;
       }
       const rms = Math.sqrt(sum / timeData.length);
-      const normalized = clamp((rms - 0.02) / 0.28, 0, 1);
-      audioEnergy.rms += (normalized - audioEnergy.rms) * 0.2;
+      const normalized = clamp((rms - 0.015) / 0.23, 0, 1);
+      audioEnergy.rms += (normalized - audioEnergy.rms) * 0.3;
 
       const now = performance.now();
-      if (normalized > 0.32 && now - lastPeakTime > 120) {
+      if (normalized > 0.25 && now - lastPeakTime > 120) {
         audioEnergy.peak = 1;
         lastPeakTime = now;
       }
-      audioEnergy.peak = Math.max(0, audioEnergy.peak - 0.08);
+      audioEnergy.peak = Math.max(0, audioEnergy.peak - 0.12);
 
       if (phase === "DRAWING") {
         document.getElementById("spec-low").style.transform = `scaleY(${bands.low})`;
@@ -788,43 +901,25 @@
       requestAnimationFrame(audioLoop);
     }
 
-    function drawWetTrace(x1, y1, x2, y2) {
-      const d = Math.hypot(x2 - x1, y2 - y1);
-      const steps = Math.max(1, Math.floor(d));
-      ctxW.fillStyle = "rgba(255,255,255,0.15)";
-      ctxM.fillStyle = "white";
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const x = x1 + (x2 - x1) * t;
-        const y = y1 + (y2 - y1) * t;
-        ctxW.beginPath();
-        ctxW.arc(x, y, 30, 0, Math.PI * 2);
-        ctxW.fill();
-        ctxM.beginPath();
-        ctxM.arc(x, y, 30, 0, Math.PI * 2);
-        ctxM.fill();
-      }
-    }
-
-    function drawSpectralBrush(x1, y1, x2, y2, life) {
-      const totalVol = bands.low + bands.mid + bands.high + audioEnergy.rms;
-      if (totalVol < SILENCE_THRESHOLD) return;
+    function drawSpectralBrush(ctx, x1, y1, x2, y2, life, drive = { bands, energy: audioEnergy, force: false }) {
+      const localBands = drive.bands || bands;
+      const localEnergy = drive.energy || audioEnergy;
+      const totalVol = localBands.low + localBands.mid + localBands.high + localEnergy.rms;
+      if (!drive.force && totalVol < SILENCE_THRESHOLD) return;
 
       const dist = Math.hypot(x2 - x1, y2 - y1);
       const steps = Math.max(1, Math.floor(dist));
 
       const speed = clamp(dist / 10, 0, 1);
       const pressure = 1.0 - (speed * 0.6);
-      const whisper = audioEnergy.rms < 0.18;
+      const whisper = localEnergy.rms < 0.18;
       const brush = activeBrush;
       const baseRgb = hexToRgb(activeInk.value);
       const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.35);
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
-      ctxP.save();
-      ctxP.globalCompositeOperation = "multiply";
-
-      const humid = isWet(x1, y1);
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
 
       let dx = x2 - x1;
       let dy = y2 - y1;
@@ -836,7 +931,8 @@
         ny = dx / len;
       }
 
-      const jitterBase = (bands.high * 8 + audioEnergy.rms * 6) * brush.jitter;
+      const audioBoost = 1 + localEnergy.rms * 0.9 + localEnergy.peak * 1.1;
+      const jitterBase = (localBands.high * 10 + localEnergy.rms * 10) * brush.jitter * audioBoost;
 
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
@@ -847,31 +943,36 @@
         cy += (Math.random() - 0.5) * jitterBase;
 
         if (whisper) {
-          const washSize = (brush.baseSize * 1.8 + bands.low * 18) * pressure;
-          ctxP.fillStyle = rgba(mistRgb, 0.08 * brush.flow);
-          ctxP.beginPath();
-          ctxP.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctxP.fill();
+          const washSize = (brush.baseSize * brushSizeScale * 1.9 + localBands.low * 20) * pressure;
+          ctx.fillStyle = rgba(mistRgb, 0.1 * brush.flow * opacityScale);
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
         }
 
-        if (bands.low > 0.03) {
-          const offset = (Math.random() - 0.5) * 18 * bands.low * brush.spread;
+        if (localBands.low > 0.03) {
+          const offset = (Math.random() - 0.5) * 20 * localBands.low * brush.spread;
           const bx = cx + nx * offset;
           const by = cy + ny * offset;
 
-          const size = (brush.baseSize * 0.6 + bands.low * 22) * pressure;
-          const alpha = (humid ? 0.03 : 0.08) * bands.low * brush.flow * (whisper ? 0.5 : 1);
+          const size = (brush.baseSize * brushSizeScale * 0.6 + localBands.low * 26) * pressure * audioBoost;
+          const alpha = 0.1 * localBands.low * brush.flow * (whisper ? 0.5 : 1) * opacityScale;
 
-          ctxP.fillStyle = rgba(deepRgb, alpha);
-          ctxP.beginPath();
-          ctxP.ellipse(bx, by, size, size * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctxP.fill();
+          ctx.fillStyle = rgba(deepRgb, alpha);
+          ctx.beginPath();
+          ctx.ellipse(bx, by, size, size * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (Math.random() < 0.08 * localBands.low) {
+            const stainSize = size * (1.6 + localBands.low);
+            addStain(ctx, bx, by, stainSize, baseRgb, localBands.low * 0.6);
+          }
         }
 
-        if (bands.mid > 0.02) {
+        if (localBands.mid > 0.02) {
           const widthBoost = whisper ? 1.5 : 1;
-          const brushWidth = (brush.baseSize * brush.spread + bands.mid * 18) * pressure * widthBoost;
-          const bristles = Math.max(6, Math.round(brush.bristles + bands.mid * 10));
+          const brushWidth = (brush.baseSize * brushSizeScale * brush.spread + localBands.mid * 22) * pressure * widthBoost * audioBoost;
+          const bristles = Math.max(6, Math.round(brush.bristles + localBands.mid * 12));
 
           for (let b = 0; b < bristles; b++) {
             const spread = (Math.random() - 0.5) * brushWidth * 2;
@@ -881,77 +982,87 @@
             const mx = cx + nx * spread;
             const my = cy + ny * spread;
 
-            const size = (0.6 + Math.random()) * pressure * (whisper ? 0.8 : 1);
+            const size = (0.6 + Math.random()) * pressure * (whisper ? 0.8 : 1) * brushSizeScale;
 
-            let alpha = 0.55 * bands.mid * brush.flow;
-            if (humid) alpha *= 0.4;
+            let alpha = 0.6 * localBands.mid * brush.flow;
             if (whisper) alpha *= 0.45;
+            alpha *= opacityScale;
 
             if (Math.random() < brush.grain * 0.3) continue;
 
-            ctxP.fillStyle = rgba(baseRgb, alpha);
-            ctxP.beginPath();
-            ctxP.arc(mx, my, size, 0, Math.PI * 2);
-            ctxP.fill();
+            ctx.fillStyle = rgba(baseRgb, alpha);
+            ctx.beginPath();
+            ctx.arc(mx, my, size, 0, Math.PI * 2);
+            ctx.fill();
           }
         }
 
-        const splashIntensity = Math.max(bands.high, audioEnergy.peak);
+        const splashIntensity = Math.max(localBands.high, localEnergy.peak);
         if (splashIntensity > 0.1) {
-          if (Math.random() < 0.2 + splashIntensity * 0.5) {
-            const scatter = (6 + splashIntensity * 34) * brush.spread;
+          if (Math.random() < 0.3 + splashIntensity * 0.6) {
+            const scatter = (8 + splashIntensity * 40) * brush.spread;
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
 
-            const size = 0.6 + Math.random() * (1 + splashIntensity);
-            const alpha = 0.7 * splashIntensity * (whisper ? 0.5 : 1);
+            const size = (0.6 + Math.random() * (1 + splashIntensity)) * brushSizeScale;
+            const alpha = 0.75 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
 
-            ctxP.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
-            ctxP.beginPath();
-            ctxP.arc(hx, hy, size, 0, Math.PI * 2);
-            ctxP.fill();
+            ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
+            ctx.beginPath();
+            ctx.arc(hx, hy, size, 0, Math.PI * 2);
+            ctx.fill();
           }
 
-          if (Math.random() < 0.08 * splashIntensity) {
-            const len = 12 * splashIntensity;
+          if (Math.random() < 0.12 * splashIntensity) {
+            const len = 14 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
-            ctxP.strokeStyle = rgba(mistRgb, 0.45 * splashIntensity);
-            ctxP.lineWidth = 0.5;
-            ctxP.beginPath();
-            ctxP.moveTo(cx, cy);
-            ctxP.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
-            ctxP.stroke();
+            ctx.strokeStyle = rgba(mistRgb, 0.5 * splashIntensity * opacityScale);
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+            ctx.stroke();
           }
 
-          if (audioEnergy.peak > 0.2 && Math.random() < 0.5) {
-            addSplatter(cx, cy, audioEnergy.peak, baseRgb);
+          if (localEnergy.peak > 0.2 && Math.random() < 0.6) {
+            addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
+            addStain(ctx, cx, cy, 22 + localEnergy.peak * 40, baseRgb, localEnergy.peak);
           }
         }
       }
 
-      ctxP.restore();
+      ctx.restore();
     }
 
-    function addSplatter(cx, cy, intensity, baseRgb) {
-      const drops = Math.ceil(6 * intensity);
+    function addSplatter(ctx, cx, cy, intensity, baseRgb) {
+      const drops = Math.ceil(8 * intensity);
       for (let i = 0; i < drops; i++) {
         const angle = Math.random() * Math.PI * 2;
         const radius = 10 + Math.random() * 30 * intensity;
         const sx = cx + Math.cos(angle) * radius;
         const sy = cy + Math.sin(angle) * radius;
-        const size = 0.8 + Math.random() * 2.4 * intensity;
-        const alpha = 0.55 * intensity;
-        ctxP.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.15), alpha);
-        ctxP.beginPath();
-        ctxP.arc(sx, sy, size, 0, Math.PI * 2);
-        ctxP.fill();
+        const size = (0.8 + Math.random() * 2.6 * intensity) * brushSizeScale;
+        const alpha = 0.6 * intensity * opacityScale;
+        ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.15), alpha);
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    function isWet(x, y) {
-      const ix = clamp(Math.floor(x), 0, mask.width - 1);
-      const iy = clamp(Math.floor(y), 0, mask.height - 1);
-      return ctxM.getImageData(ix, iy, 1, 1).data[0] > 100;
+    function addStain(ctx, cx, cy, size, baseRgb, intensity) {
+      const radius = Math.max(12, size);
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius);
+      grad.addColorStop(0, rgba(baseRgb, 0.2 * intensity * opacityScale));
+      grad.addColorStop(0.6, rgba(baseRgb, 0.08 * intensity * opacityScale));
+      grad.addColorStop(1, rgba(baseRgb, 0));
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, radius * 1.2, radius * 0.85, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     function handleMove(e) {
@@ -960,13 +1071,9 @@
       const x = p.x;
       const y = p.y;
 
-      if (lx !== undefined) {
-        if (phase === "HUMIDIFY") {
-          drawWetTrace(lx, ly, x, y);
-        } else if (phase === "DRAWING") {
-          const life = remainingTime / timeLimit;
-          drawSpectralBrush(lx, ly, x, y, life);
-        }
+      if (lx !== undefined && phase === "DRAWING") {
+        const life = remainingTime / timeLimit;
+        drawSpectralBrush(ctxP, lx, ly, x, y, life);
       }
       lx = x;
       ly = y;
@@ -999,7 +1106,7 @@
     const specViz = document.getElementById("spectrum-viz");
 
     mainBtn.onclick = () => {
-      if (phase === "HUMIDIFY" || phase === "PAUSED") {
+      if (phase === "READY" || phase === "PAUSED") {
         startCycle();
       }
     };
@@ -1093,7 +1200,6 @@
       }
 
       timerContainer.style.opacity = 0;
-      ctxW.clearRect(0, 0, water.width, water.height);
       mainBtn.style.display = "none";
       secBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
@@ -1108,7 +1214,7 @@
     }
 
     function resetRitual() {
-      phase = "HUMIDIFY";
+      phase = "READY";
       clearAll();
       recordedChunks = [];
       cycleIndex = 0;
