@@ -3,21 +3,14 @@ import { useEffect, useRef } from "react";
 const brushes = [
   { id: "senbon", name: "Senbon", style: "rake", baseSize: 8, bristles: 18, spread: 1.2, flow: 0.7, jitter: 0.45, grain: 0.35 },
   { id: "kumo", name: "Kumo", style: "mist", baseSize: 12, bristles: 8, spread: 1.4, flow: 0.35, jitter: 0.2, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 },
-  { id: "tsubaki", name: "Tsubaki", style: "petal", baseSize: 10, bristles: 12, spread: 1.1, flow: 0.55, jitter: 0.35, grain: 0.4 },
-  { id: "hibana", name: "Hibana", style: "spark", baseSize: 7, bristles: 6, spread: 2.0, flow: 0.5, jitter: 0.6, grain: 0.85 }
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 }
 ];
 
 const inkPalette = [
   { id: "sumi", name: "Sumi Noir", value: "#14110f" },
-  { id: "sumi-warm", name: "Sumi Chaud", value: "#2a1d18" },
   { id: "ai", name: "Aï Indigo", value: "#2c3b52" },
-  { id: "shu", name: "Shu Vermillon", value: "#b73a26" },
-  { id: "kokutan", name: "Kokutan", value: "#1b1a16" },
-  { id: "matsu", name: "Matsu", value: "#2c3a2f" }
+  { id: "shu", name: "Shu Vermillon", value: "#b73a26" }
 ];
-
-const cycleDurations = [5000, 7000, 3000];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -42,13 +35,11 @@ const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 export default function App() {
   const canvasRef = useRef(null);
   const canvasWrapRef = useRef(null);
-  const previewCanvasRef = useRef(null);
 
   useEffect(() => {
     const paper = canvasRef.current;
     const canvasWrap = canvasWrapRef.current;
-    const previewCanvas = previewCanvasRef.current;
-    if (!paper || !canvasWrap || !previewCanvas) return undefined;
+    if (!paper || !canvasWrap) return undefined;
 
     const ctxP = paper.getContext("2d", { alpha: false });
 
@@ -67,34 +58,25 @@ export default function App() {
     const CANVAS_SCALE = 3;
     const MIN_BRUSH_SCALE = 0.12;
     let brushSizeScale = 1;
-    let opacityScale = 1;
-    let zoomLevel = 1;
+    let opacityScale = 0.85;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
     let lastPeakTime = 0;
     let mediaRecorder;
     let recordedChunks = [];
+    let lastVideoUrl;
     let activeBrush = brushes[0];
     let activeInk = inkPalette[0];
-    let cycleMode = "single";
-    let cycleIndex = 0;
-    let previewCtx;
-    let previewDown = false;
-    let previewLx;
-    let previewLy;
     let resizeObserver;
-    let countdownTimer;
-    let countdownValue = 0;
-    let countdownActive = false;
 
     const mainBtn = document.getElementById("main-btn");
-    const secBtn = document.getElementById("secondary-btn");
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
     const timerContainer = document.getElementById("timer-container");
     const specViz = document.getElementById("spectrum-viz");
-    const countdownDisplay = document.getElementById("countdown-display");
+    const exportToggle = document.getElementById("export-toggle");
+    const exportMenu = document.getElementById("export-menu");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -360,27 +342,7 @@ export default function App() {
     };
 
     const updateCycleStatus = () => {
-      if (cycleMode === "haiku") {
-        statusText.innerText = `Haïku — cycle ${cycleIndex + 1}/3`;
-      } else {
-        statusText.innerText = "Prêt à tracer";
-      }
-    };
-
-    const getPreviewDrive = () => {
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 450);
-      return {
-        bands: {
-          low: clamp(0.25 + pulse * 0.25, 0, 1),
-          mid: clamp(0.35 + pulse * 0.3, 0, 1),
-          high: clamp(0.2 + pulse * 0.25, 0, 1)
-        },
-        energy: {
-          rms: clamp(0.45 + pulse * 0.25, 0, 1),
-          peak: clamp(0.2 + pulse * 0.35, 0, 1)
-        },
-        force: true
-      };
+      statusText.innerText = "Prêt à tracer";
     };
 
     const getTestDrive = () => {
@@ -399,63 +361,6 @@ export default function App() {
       };
     };
 
-    const clearPreview = () => {
-      if (!previewCtx) return;
-      previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-      previewCtx.fillStyle = "rgba(255,255,255,0.8)";
-      previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
-    };
-
-    const setupPreviewCanvas = () => {
-      previewCtx = previewCanvas.getContext("2d");
-      clearPreview();
-      const previewPanel = document.getElementById("preview-panel");
-      const previewToggle = document.getElementById("preview-toggle");
-
-      const onPreviewDown = (event) => {
-        previewDown = true;
-        previewCanvas.setPointerCapture(event.pointerId);
-        previewLx = event.offsetX;
-        previewLy = event.offsetY;
-      };
-
-      const onPreviewMove = (event) => {
-        if (!previewDown) return;
-        const x = event.offsetX;
-        const y = event.offsetY;
-        if (previewLx !== undefined) {
-          drawSpectralBrush(previewCtx, previewLx, previewLy, x, y, getPreviewDrive());
-        }
-        previewLx = x;
-        previewLy = y;
-      };
-
-      const onPreviewUp = (event) => {
-        previewDown = false;
-        previewCanvas.releasePointerCapture(event.pointerId);
-        previewLx = undefined;
-        previewLy = undefined;
-      };
-
-      previewCanvas.addEventListener("pointerdown", onPreviewDown);
-      previewCanvas.addEventListener("pointermove", onPreviewMove);
-      previewCanvas.addEventListener("pointerup", onPreviewUp);
-
-      const previewClear = document.getElementById("preview-clear");
-      previewClear.addEventListener("click", clearPreview);
-      previewToggle.addEventListener("click", () => {
-        const isHidden = previewPanel.classList.toggle("hidden");
-        previewToggle.textContent = isHidden ? "Afficher la zone de test" : "Masquer la zone de test";
-      });
-
-      return () => {
-        previewCanvas.removeEventListener("pointerdown", onPreviewDown);
-        previewCanvas.removeEventListener("pointermove", onPreviewMove);
-        previewCanvas.removeEventListener("pointerup", onPreviewUp);
-        previewClear.removeEventListener("click", clearPreview);
-      };
-    };
-
     const setupBrushSizeControls = () => {
       const sizeRange = document.getElementById("size-range");
       const sizeValue = document.getElementById("size-value");
@@ -463,7 +368,6 @@ export default function App() {
         const numeric = parseFloat(value);
         const normalized = clamp(numeric, 0, 1.2);
         brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
-        opacityScale = clamp(1.05 - brushSizeScale * 0.25, 0.5, 1);
         sizeValue.textContent = `${Math.round(normalized * 100)}%`;
       };
       const onInput = (event) => updateSizing(event.target.value);
@@ -475,25 +379,29 @@ export default function App() {
         sizeRange.removeEventListener("change", onInput);
       };
     };
-
-    const setupPanelInteractions = () => {
-      const panel = document.getElementById("tool-panel");
-      const toggleBtn = document.getElementById("panel-toggle");
-      const onToggle = () => {
-        const isCollapsed = panel.classList.toggle("collapsed");
-        toggleBtn.textContent = isCollapsed ? "Afficher" : "Masquer";
+    const setupOpacityControls = () => {
+      const opacityRange = document.getElementById("opacity-range");
+      const opacityValue = document.getElementById("opacity-value");
+      const updateOpacity = (value) => {
+        const numeric = parseFloat(value);
+        opacityScale = clamp(numeric, 0.2, 1);
+        opacityValue.textContent = `${Math.round(opacityScale * 100)}%`;
       };
-      toggleBtn.addEventListener("click", onToggle);
-      return () => toggleBtn.removeEventListener("click", onToggle);
+      const onInput = (event) => updateOpacity(event.target.value);
+      opacityRange.addEventListener("input", onInput);
+      opacityRange.addEventListener("change", onInput);
+      updateOpacity(opacityRange.value);
+      return () => {
+        opacityRange.removeEventListener("input", onInput);
+        opacityRange.removeEventListener("change", onInput);
+      };
     };
 
     const setupControls = () => {
       const brushContainer = document.getElementById("brush-options");
       const colorContainer = document.getElementById("color-options");
-      const cycleContainer = document.getElementById("cycle-options");
       brushContainer.innerHTML = "";
       colorContainer.innerHTML = "";
-      cycleContainer.innerHTML = "";
 
       brushes.forEach((brush, index) => {
         const btn = document.createElement("button");
@@ -524,26 +432,6 @@ export default function App() {
         colorContainer.appendChild(chip);
       });
 
-      const cycles = [
-        { id: "single", name: "7s" },
-        { id: "haiku", name: "Haïku 5·7·3" }
-      ];
-
-      cycles.forEach((cycle, index) => {
-        const btn = document.createElement("button");
-        btn.className = "chip-btn";
-        btn.textContent = cycle.name;
-        btn.dataset.cycleId = cycle.id;
-        if (index === 0) btn.classList.add("active");
-        btn.addEventListener("click", () => {
-          cycleMode = cycle.id;
-          cycleIndex = 0;
-          [...cycleContainer.querySelectorAll(".chip-btn")].forEach((el) => el.classList.remove("active"));
-          btn.classList.add("active");
-          updateCycleStatus();
-        });
-        cycleContainer.appendChild(btn);
-      });
     };
 
     const setupRecorder = () => {
@@ -570,19 +458,11 @@ export default function App() {
           const blob = new Blob(recordedChunks, {
             type: recordedChunks[0] ? recordedChunks[0].type : "video/webm"
           });
-          const url = URL.createObjectURL(blob);
-          document.getElementById("final-video").src = url;
-
-          document.getElementById("dl-video-btn").onclick = () => {
-            const a = document.createElement("a");
-            a.style.display = "none";
-            a.href = url;
-            a.download = `lavoixdushodo_${Date.now()}.webm`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-          };
-          showReplay();
+          if (lastVideoUrl) {
+            window.URL.revokeObjectURL(lastVideoUrl);
+          }
+          lastVideoUrl = URL.createObjectURL(blob);
+          saveVideoBtn.disabled = false;
         };
       } catch (error) {
         console.error("Erreur recorder", error);
@@ -677,6 +557,7 @@ export default function App() {
 
     const handleMove = (event) => {
       if (!isDown) return;
+      if (event.pointerType === "touch") return;
       const { x, y } = getPointerPos(event);
       if (y > paper.height) {
         lx = x;
@@ -686,7 +567,7 @@ export default function App() {
       if (lx !== undefined) {
         if (phase === "DRAWING") {
           drawSpectralBrush(ctxP, lx, ly, x, y);
-        } else if (phase === "READY" || phase === "PAUSED") {
+        } else if (phase === "READY") {
           drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
         }
       }
@@ -695,6 +576,7 @@ export default function App() {
     };
 
     const handleDown = (event) => {
+      if (event.pointerType === "touch") return;
       isDown = true;
       const { x, y } = getPointerPos(event);
       lx = x;
@@ -708,16 +590,9 @@ export default function App() {
       ly = undefined;
     };
 
-    const getCycleDuration = () => {
-      if (cycleMode === "haiku") {
-        return cycleDurations[cycleIndex] || cycleDurations[cycleDurations.length - 1];
-      }
-      return 7000;
-    };
-
     const startDrawingCycle = () => {
       phase = "DRAWING";
-      timeLimit = getCycleDuration();
+      timeLimit = 7000;
       startTime = Date.now();
       remainingTime = timeLimit;
 
@@ -729,111 +604,44 @@ export default function App() {
 
       recDot.classList.add("active");
       mainBtn.style.display = "none";
-      secBtn.style.display = "none";
       timerContainer.style.opacity = 1;
       specViz.style.opacity = 1;
-      if (cycleMode === "haiku") {
-        statusText.innerText = `Encre haïku — cycle ${cycleIndex + 1}/3`;
-      } else {
-        statusText.innerText = "Enregistrement en cours...";
-      }
+      statusText.innerText = "Enregistrement en cours...";
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     };
 
-    const stopCountdown = () => {
-      if (countdownTimer) {
-        clearInterval(countdownTimer);
-        countdownTimer = undefined;
-      }
-      countdownActive = false;
-      countdownDisplay.classList.remove("active");
-    };
-
-    const beginCountdown = () => {
-      if (countdownActive) return;
-      stopCountdown();
-      phase = "COUNTDOWN";
-      statusText.innerText = "Départ imminent";
-      countdownValue = 3;
-      countdownActive = true;
-      countdownDisplay.textContent = countdownValue.toString();
-      countdownDisplay.classList.add("active");
-      countdownTimer = window.setInterval(() => {
-        countdownValue -= 1;
-        countdownDisplay.textContent = countdownValue.toString();
-        if (countdownValue <= 0) {
-          stopCountdown();
-          startDrawingCycle();
-        }
-      }, 1000);
-    };
-
     const startCycle = () => {
       clearAll();
-      beginCountdown();
-    };
-
-    const pauseCycle = () => {
-      phase = "PAUSED";
-
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.pause();
-      }
-
-      recDot.classList.remove("active");
-      if (cycleMode === "haiku") {
-        cycleIndex += 1;
-        if (cycleIndex >= cycleDurations.length) {
-          finishRitual();
-          return;
-        }
-        mainBtn.innerText = "Cycle suivant";
-        mainBtn.style.display = "block";
-        secBtn.style.display = "none";
-        statusText.innerText = `Respiration — prochain cycle ${cycleIndex + 1}/3`;
-      } else {
-        mainBtn.innerText = "Nouveau Cycle";
-        mainBtn.style.display = "block";
-        secBtn.style.display = "block";
-        statusText.innerText = "Pause. Ajoutez ou terminez.";
-      }
+      exportMenu.classList.remove("active");
+      startDrawingCycle();
     };
 
     const finishRitual = () => {
-      stopCountdown();
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.stop();
       }
 
       timerContainer.style.opacity = 0;
       mainBtn.style.display = "none";
-      secBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
       recDot.classList.remove("active");
-      cycleIndex = 0;
-    };
-
-    const showReplay = () => {
-      document.getElementById("replay-overlay").classList.add("active");
-      const v = document.getElementById("final-video");
-      v.play();
     };
 
     const resetRitual = () => {
       phase = "READY";
-      stopCountdown();
       clearAll();
       recordedChunks = [];
-      cycleIndex = 0;
+      lastVideoUrl = undefined;
+      saveVideoBtn.disabled = true;
 
-      mainBtn.innerText = "Lancer le cycle";
+      mainBtn.innerText = "Go•°";
       mainBtn.style.display = "block";
-      secBtn.style.display = "none";
 
       timerContainer.style.opacity = 0;
       updateCycleStatus();
       recDot.classList.remove("active");
+      exportMenu.classList.remove("active");
     };
 
     const loop = () => {
@@ -846,7 +654,8 @@ export default function App() {
         document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
 
         if (remainingTime <= 0) {
-          pauseCycle();
+          phase = "FINISHED";
+          finishRitual();
         }
       }
       requestAnimationFrame(loop);
@@ -861,10 +670,9 @@ export default function App() {
     };
 
     const initBtn = document.getElementById("init-btn");
-    const closeReplayBtn = document.getElementById("close-replay-btn");
     const resetBtn = document.getElementById("reset-btn");
     const saveBtn = document.getElementById("save-btn");
-    const zoomBtn = document.getElementById("zoom-btn");
+    const saveVideoBtn = document.getElementById("save-video-btn");
 
     const onSave = () => {
       const a = document.createElement("a");
@@ -873,74 +681,57 @@ export default function App() {
       a.click();
     };
 
-    const preventTouch = (event) => event.preventDefault();
-
-    const updateZoom = (nextZoom) => {
-      zoomLevel = nextZoom;
-      canvasWrap.style.setProperty("--canvas-zoom", zoomLevel.toString());
-      zoomBtn.classList.toggle("active", zoomLevel > 1);
-      zoomBtn.title = zoomLevel > 1 ? "Zoom arrière" : "Zoom avant";
+    const onSaveVideo = () => {
+      if (!lastVideoUrl) return;
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = lastVideoUrl;
+      a.download = `lavoixdushodo_${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     };
 
-    const onZoomToggle = () => {
-      updateZoom(zoomLevel > 1 ? 1 : 1.5);
-    };
-
-    const onCloseReplay = () => {
-      document.getElementById("replay-overlay").classList.remove("active");
-      recordedChunks = [];
+    const onExportToggle = () => {
+      exportMenu.classList.toggle("active");
     };
     const onMainClick = () => {
-      if (phase === "READY" || phase === "PAUSED") startCycle();
-    };
-    const onSecondaryClick = () => {
-      if (phase === "PAUSED") {
-        phase = "FINISHED";
-        finishRitual();
-      }
+      if (phase === "READY") startCycle();
     };
 
     initBtn.addEventListener("click", onInitClick);
-    closeReplayBtn.addEventListener("click", onCloseReplay);
     resetBtn.addEventListener("click", resetRitual);
     saveBtn.addEventListener("click", onSave);
-    zoomBtn.addEventListener("click", onZoomToggle);
+    saveVideoBtn.addEventListener("click", onSaveVideo);
+    exportToggle.addEventListener("click", onExportToggle);
     mainBtn.addEventListener("click", onMainClick);
-    secBtn.addEventListener("click", onSecondaryClick);
 
     paper.addEventListener("pointerdown", handleDown);
     paper.addEventListener("pointermove", handleMove);
     paper.addEventListener("pointerup", handleUp);
-    paper.addEventListener("touchmove", preventTouch, { passive: false });
-
-    const cleanupPreview = setupPreviewCanvas();
     const cleanupSize = setupBrushSizeControls();
-    const cleanupPanel = setupPanelInteractions();
+    const cleanupOpacity = setupOpacityControls();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
-    updateZoom(1);
+    saveVideoBtn.disabled = true;
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
     window.addEventListener("resize", resizeCanvas);
 
     return () => {
-      cleanupPreview();
       cleanupSize();
-      cleanupPanel();
-      stopCountdown();
+      cleanupOpacity();
       initBtn.removeEventListener("click", onInitClick);
-      closeReplayBtn.removeEventListener("click", onCloseReplay);
       resetBtn.removeEventListener("click", resetRitual);
       saveBtn.removeEventListener("click", onSave);
-      zoomBtn.removeEventListener("click", onZoomToggle);
+      saveVideoBtn.removeEventListener("click", onSaveVideo);
+      exportToggle.removeEventListener("click", onExportToggle);
       mainBtn.removeEventListener("click", onMainClick);
-      secBtn.removeEventListener("click", onSecondaryClick);
       paper.removeEventListener("pointerdown", handleDown);
       paper.removeEventListener("pointermove", handleMove);
       paper.removeEventListener("pointerup", handleUp);
-      paper.removeEventListener("touchmove", preventTouch);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
     };
@@ -954,14 +745,6 @@ export default function App() {
         <button id="init-btn">Activer le Pinceau</button>
       </div>
 
-      <div id="replay-overlay" className="replay-overlay">
-        <video id="final-video" playsInline loop controls></video>
-        <div className="replay-controls">
-          <button id="dl-video-btn" className="replay-btn">Sauvegarder Vidéo</button>
-          <button id="close-replay-btn" className="replay-btn">Fermer</button>
-        </div>
-      </div>
-
       <div className="canvas-area" ref={canvasWrapRef}>
         <canvas id="paper-layer" ref={canvasRef}></canvas>
         <div className="paper-texture"></div>
@@ -971,8 +754,6 @@ export default function App() {
               <div id="rec-dot"></div>
               <span id="status-text">Prêt à tracer</span>
             </div>
-            <div id="countdown-display" className="countdown-display">3</div>
-
             <div id="timer-container">
               <div id="timer-display">7.0</div>
               <div id="timer-bar-bg"><div id="timer-bar"></div></div>
@@ -985,56 +766,43 @@ export default function App() {
           </div>
 
           <div className="action-area">
-            <button id="main-btn" className="main-btn">Lancer le cycle</button>
-            <button id="secondary-btn" className="main-btn secondary" style={{ display: "none" }}>Terminer l'oeuvre</button>
+            <button id="main-btn" className="main-btn">Go•°</button>
           </div>
         </div>
       </div>
 
       <div className="tools-area">
-        <div className="tools-row">
-          <button id="reset-btn" className="btn-circle" title="Tout effacer">↺</button>
-          <button id="save-btn" className="btn-circle" title="Image PNG">↓</button>
-          <button id="zoom-btn" className="btn-circle" title="Zoom avant">🔍</button>
-        </div>
-
-        <div className="tools-panels">
-          <div id="tool-panel" className="controls-panel card">
-            <div className="panel-header">
-              <span>Encre &amp; Pinceau</span>
-              <button id="panel-toggle" className="panel-toggle" type="button">Masquer</button>
-            </div>
-            <div className="panel-body">
-              <div className="control-group inline">
-                <div className="control-label">Pinceaux</div>
-                <div id="brush-options" className="option-row compact"></div>
-              </div>
-              <div className="control-group inline">
-                <div className="control-label">Encres</div>
-                <div id="color-options" className="option-row compact"></div>
-              </div>
-              <div className="control-group inline">
-                <div className="control-label">Taille du tracé</div>
-                <div className="size-row">
-                  <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
-                  <span id="size-value" className="size-value">100%</span>
-                </div>
-              </div>
-              <div className="control-group inline">
-                <div className="control-label">Cycle</div>
-                <div id="cycle-options" className="option-row"></div>
-              </div>
+        <div className="minimal-controls">
+          <div className="control-block">
+            <div className="control-label">Pinceaux</div>
+            <div id="brush-options" className="option-row compact"></div>
+          </div>
+          <div className="control-block">
+            <div className="control-label">Encres</div>
+            <div id="color-options" className="option-row compact"></div>
+          </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Taille</div>
+            <div className="size-row">
+              <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
+              <span id="size-value" className="size-value">100%</span>
             </div>
           </div>
-
-          <div className="preview-card card">
-            <div className="panel-header">
-              <span>Zone de test</span>
-              <button id="preview-toggle" className="panel-toggle" type="button">Afficher la zone de test</button>
+          <div className="control-block slider-block">
+            <div className="control-label">Opacité</div>
+            <div className="size-row">
+              <input id="opacity-range" type="range" min="0.2" max="1" step="0.05" defaultValue="0.85" />
+              <span id="opacity-value" className="size-value">85%</span>
             </div>
-            <div className="preview-panel hidden" id="preview-panel">
-              <canvas id="preview-canvas" ref={previewCanvasRef} width="210" height="120"></canvas>
-              <button id="preview-clear" className="chip-btn" type="button">Effacer</button>
+          </div>
+          <div className="control-block actions-block">
+            <button id="reset-btn" className="chip-btn" type="button">Relancer</button>
+            <div className="export-wrap">
+              <button id="export-toggle" className="chip-btn" type="button">Exporter</button>
+              <div id="export-menu" className="export-menu">
+                <button id="save-btn" className="chip-btn" type="button">Image</button>
+                <button id="save-video-btn" className="chip-btn" type="button">Audio/Vidéo</button>
+              </div>
             </div>
           </div>
         </div>
