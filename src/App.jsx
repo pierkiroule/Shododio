@@ -17,8 +17,6 @@ const inkPalette = [
   { id: "matsu", name: "Matsu", value: "#2c3a2f" }
 ];
 
-const cycleDurations = [5000, 7000, 3000];
-
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const hexToRgb = (hex) => {
@@ -78,24 +76,15 @@ export default function App() {
     let recordedChunks = [];
     let activeBrush = brushes[0];
     let activeInk = inkPalette[0];
-    let cycleMode = "single";
-    let cycleIndex = 0;
     let previewCtx;
     let previewDown = false;
     let previewLx;
     let previewLy;
     let resizeObserver;
-    let countdownTimer;
-    let countdownValue = 0;
-    let countdownActive = false;
-
-    const mainBtn = document.getElementById("main-btn");
-    const secBtn = document.getElementById("secondary-btn");
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
     const timerContainer = document.getElementById("timer-container");
     const specViz = document.getElementById("spectrum-viz");
-    const countdownDisplay = document.getElementById("countdown-display");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -387,14 +376,6 @@ export default function App() {
       ctx.restore();
     };
 
-    const updateCycleStatus = () => {
-      if (cycleMode === "haiku") {
-        statusText.innerText = `Haïku — cycle ${cycleIndex + 1}/3`;
-      } else {
-        statusText.innerText = "Prêt à tracer";
-      }
-    };
-
     const getPreviewDrive = () => {
       const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 450);
       return {
@@ -406,22 +387,6 @@ export default function App() {
         energy: {
           rms: clamp(0.45 + pulse * 0.25, 0, 1),
           peak: clamp(0.2 + pulse * 0.35, 0, 1)
-        },
-        force: true
-      };
-    };
-
-    const getTestDrive = () => {
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 700);
-      return {
-        bands: {
-          low: clamp(0.2 + pulse * 0.2, 0, 1),
-          mid: clamp(0.4 + pulse * 0.25, 0, 1),
-          high: clamp(0.25 + pulse * 0.2, 0, 1)
-        },
-        energy: {
-          rms: clamp(0.35 + pulse * 0.2, 0, 1),
-          peak: clamp(0.15 + pulse * 0.25, 0, 1)
         },
         force: true
       };
@@ -536,10 +501,8 @@ export default function App() {
     const setupControls = () => {
       const brushContainer = document.getElementById("brush-options");
       const colorContainer = document.getElementById("color-options");
-      const cycleContainer = document.getElementById("cycle-options");
       brushContainer.innerHTML = "";
       colorContainer.innerHTML = "";
-      cycleContainer.innerHTML = "";
 
       brushes.forEach((brush, index) => {
         const btn = document.createElement("button");
@@ -570,26 +533,6 @@ export default function App() {
         colorContainer.appendChild(chip);
       });
 
-      const cycles = [
-        { id: "single", name: "7s" },
-        { id: "haiku", name: "Haïku 5·7·3" }
-      ];
-
-      cycles.forEach((cycle, index) => {
-        const btn = document.createElement("button");
-        btn.className = "chip-btn";
-        btn.textContent = cycle.name;
-        btn.dataset.cycleId = cycle.id;
-        if (index === 0) btn.classList.add("active");
-        btn.addEventListener("click", () => {
-          cycleMode = cycle.id;
-          cycleIndex = 0;
-          [...cycleContainer.querySelectorAll(".chip-btn")].forEach((el) => el.classList.remove("active"));
-          btn.classList.add("active");
-          updateCycleStatus();
-        });
-        cycleContainer.appendChild(btn);
-      });
     };
 
     const setupRecorder = () => {
@@ -650,6 +593,7 @@ export default function App() {
         setupRecorder();
 
         document.getElementById("boot-screen").classList.add("hidden");
+        startDrawingCycle();
         loop();
         requestAnimationFrame(audioLoop);
       } catch (error) {
@@ -729,12 +673,8 @@ export default function App() {
         ly = y;
         return;
       }
-      if (lx !== undefined) {
-        if (phase === "DRAWING") {
-          drawSpectralBrush(ctxP, lx, ly, x, y);
-        } else if (phase === "READY" || phase === "PAUSED") {
-          drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
-        }
+      if (lx !== undefined && phase === "DRAWING") {
+        drawSpectralBrush(ctxP, lx, ly, x, y);
       }
       lx = x;
       ly = y;
@@ -754,16 +694,9 @@ export default function App() {
       ly = undefined;
     };
 
-    const getCycleDuration = () => {
-      if (cycleMode === "haiku") {
-        return cycleDurations[cycleIndex] || cycleDurations[cycleDurations.length - 1];
-      }
-      return 7000;
-    };
-
     const startDrawingCycle = () => {
       phase = "DRAWING";
-      timeLimit = getCycleDuration();
+      timeLimit = Number.POSITIVE_INFINITY;
       startTime = Date.now();
       remainingTime = timeLimit;
 
@@ -774,90 +707,11 @@ export default function App() {
       }
 
       recDot.classList.add("active");
-      mainBtn.style.display = "none";
-      secBtn.style.display = "none";
-      timerContainer.style.opacity = 1;
+      timerContainer.style.opacity = 0;
       specViz.style.opacity = 1;
-      if (cycleMode === "haiku") {
-        statusText.innerText = `Encre haïku — cycle ${cycleIndex + 1}/3`;
-      } else {
-        statusText.innerText = "Enregistrement en cours...";
-      }
+      statusText.innerText = "Résonance en cours...";
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-    };
-
-    const stopCountdown = () => {
-      if (countdownTimer) {
-        clearInterval(countdownTimer);
-        countdownTimer = undefined;
-      }
-      countdownActive = false;
-      countdownDisplay.classList.remove("active");
-    };
-
-    const beginCountdown = () => {
-      if (countdownActive) return;
-      stopCountdown();
-      phase = "COUNTDOWN";
-      statusText.innerText = "Départ imminent";
-      countdownValue = 3;
-      countdownActive = true;
-      countdownDisplay.textContent = countdownValue.toString();
-      countdownDisplay.classList.add("active");
-      countdownTimer = window.setInterval(() => {
-        countdownValue -= 1;
-        countdownDisplay.textContent = countdownValue.toString();
-        if (countdownValue <= 0) {
-          stopCountdown();
-          startDrawingCycle();
-        }
-      }, 1000);
-    };
-
-    const startCycle = () => {
-      clearAll();
-      beginCountdown();
-    };
-
-    const pauseCycle = () => {
-      phase = "PAUSED";
-
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.pause();
-      }
-
-      recDot.classList.remove("active");
-      if (cycleMode === "haiku") {
-        cycleIndex += 1;
-        if (cycleIndex >= cycleDurations.length) {
-          finishRitual();
-          return;
-        }
-        mainBtn.innerText = "Kiai suivant";
-        mainBtn.style.display = "block";
-        secBtn.style.display = "none";
-        statusText.innerText = `Respiration — prochain cycle ${cycleIndex + 1}/3`;
-      } else {
-        mainBtn.innerText = "Relancer Kiai";
-        mainBtn.style.display = "block";
-        secBtn.style.display = "block";
-        statusText.innerText = "Pause. Ajoutez ou terminez.";
-      }
-    };
-
-    const finishRitual = () => {
-      stopCountdown();
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-
-      timerContainer.style.opacity = 0;
-      mainBtn.style.display = "none";
-      secBtn.style.display = "none";
-      statusText.innerText = "Rituel Terminé";
-      recDot.classList.remove("active");
-      cycleIndex = 0;
     };
 
     const showReplay = () => {
@@ -867,23 +721,14 @@ export default function App() {
     };
 
     const resetRitual = () => {
-      phase = "READY";
-      stopCountdown();
       clearAll();
       recordedChunks = [];
-      cycleIndex = 0;
-
-      mainBtn.innerText = "Kiai";
-      mainBtn.style.display = "block";
-      secBtn.style.display = "none";
-
       timerContainer.style.opacity = 0;
-      updateCycleStatus();
-      recDot.classList.remove("active");
+      statusText.innerText = phase === "DRAWING" ? "Résonance en cours..." : "Prêt à tracer";
     };
 
     const loop = () => {
-      if (phase === "DRAWING") {
+      if (phase === "DRAWING" && Number.isFinite(timeLimit)) {
         const elapsed = Date.now() - startTime;
         remainingTime = Math.max(0, timeLimit - elapsed);
         const ratio = remainingTime / timeLimit;
@@ -891,9 +736,6 @@ export default function App() {
         document.getElementById("timer-display").innerText = (remainingTime / 1000).toFixed(1);
         document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
 
-        if (remainingTime <= 0) {
-          pauseCycle();
-        }
       }
       requestAnimationFrame(loop);
     };
@@ -936,23 +778,11 @@ export default function App() {
       document.getElementById("replay-overlay").classList.remove("active");
       recordedChunks = [];
     };
-    const onMainClick = () => {
-      if (phase === "READY" || phase === "PAUSED") startCycle();
-    };
-    const onSecondaryClick = () => {
-      if (phase === "PAUSED") {
-        phase = "FINISHED";
-        finishRitual();
-      }
-    };
-
     initBtn.addEventListener("click", onInitClick);
     closeReplayBtn.addEventListener("click", onCloseReplay);
     resetBtn.addEventListener("click", resetRitual);
     saveBtn.addEventListener("click", onSave);
     zoomBtn.addEventListener("click", onZoomToggle);
-    mainBtn.addEventListener("click", onMainClick);
-    secBtn.addEventListener("click", onSecondaryClick);
 
     paper.addEventListener("pointerdown", handleDown);
     paper.addEventListener("pointermove", handleMove);
@@ -965,7 +795,6 @@ export default function App() {
     const cleanupPanel = setupPanelInteractions();
     setupControls();
     resizeCanvas();
-    updateCycleStatus();
     updateZoom(1);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
@@ -977,14 +806,11 @@ export default function App() {
       cleanupSize();
       cleanupPanel();
       cleanupInk();
-      stopCountdown();
       initBtn.removeEventListener("click", onInitClick);
       closeReplayBtn.removeEventListener("click", onCloseReplay);
       resetBtn.removeEventListener("click", resetRitual);
       saveBtn.removeEventListener("click", onSave);
       zoomBtn.removeEventListener("click", onZoomToggle);
-      mainBtn.removeEventListener("click", onMainClick);
-      secBtn.removeEventListener("click", onSecondaryClick);
       paper.removeEventListener("pointerdown", handleDown);
       paper.removeEventListener("pointermove", handleMove);
       paper.removeEventListener("pointerup", handleUp);
@@ -1019,8 +845,6 @@ export default function App() {
               <div id="rec-dot"></div>
               <span id="status-text">Prêt à tracer</span>
             </div>
-            <div id="countdown-display" className="countdown-display">3</div>
-
             <div id="timer-container">
               <div id="timer-display">7.0</div>
               <div id="timer-bar-bg"><div id="timer-bar"></div></div>
@@ -1032,10 +856,6 @@ export default function App() {
             </div>
           </div>
 
-          <div className="action-area">
-            <button id="main-btn" className="main-btn kiai-btn">Kiai</button>
-            <button id="secondary-btn" className="main-btn secondary" style={{ display: "none" }}>Terminer l'oeuvre</button>
-          </div>
         </div>
       </div>
 
@@ -1074,10 +894,6 @@ export default function App() {
                   <input id="ink-range" type="range" min="0.5" max="1.6" step="0.05" defaultValue="1" />
                   <span id="ink-value" className="size-value">100%</span>
                 </div>
-              </div>
-              <div className="control-group inline">
-                <div className="control-label">Cycle</div>
-                <div id="cycle-options" className="option-row"></div>
               </div>
             </div>
           </div>
