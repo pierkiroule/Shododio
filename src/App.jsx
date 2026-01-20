@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 
 const brushes = [
-  { id: "kasane", name: "Kasane", baseSize: 9, bristles: 16, spread: 1.1, flow: 0.65, jitter: 0.5, grain: 0.35 },
-  { id: "kasure", name: "Kasure", baseSize: 7, bristles: 10, spread: 1.6, flow: 0.35, jitter: 0.35, grain: 0.75 },
-  { id: "bokashi", name: "Bokashi", baseSize: 11, bristles: 7, spread: 1.25, flow: 0.25, jitter: 0.2, grain: 0.2 },
-  { id: "hayai", name: "Hayai", baseSize: 6, bristles: 12, spread: 0.8, flow: 0.55, jitter: 0.8, grain: 0.45 },
-  { id: "tsubu", name: "Tsubu", baseSize: 8, bristles: 6, spread: 1.8, flow: 0.4, jitter: 0.45, grain: 0.9 }
+  { id: "senbon", name: "Senbon", style: "rake", baseSize: 8, bristles: 18, spread: 1.2, flow: 0.7, jitter: 0.45, grain: 0.35 },
+  { id: "kumo", name: "Kumo", style: "mist", baseSize: 12, bristles: 8, spread: 1.4, flow: 0.35, jitter: 0.2, grain: 0.2 },
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 },
+  { id: "tsubaki", name: "Tsubaki", style: "petal", baseSize: 10, bristles: 12, spread: 1.1, flow: 0.55, jitter: 0.35, grain: 0.4 },
+  { id: "hibana", name: "Hibana", style: "spark", baseSize: 7, bristles: 6, spread: 2.0, flow: 0.5, jitter: 0.6, grain: 0.85 }
 ];
 
 const inkPalette = [
@@ -148,6 +148,41 @@ export default function App() {
       ctx.restore();
     };
 
+    const drawPetalStamp = (ctx, cx, cy, size, angle, color, alpha) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.fillStyle = rgba(color, alpha);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 1.1, size * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const drawScaleStamp = (ctx, cx, cy, size, angle, color, alpha) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.fillStyle = rgba(color, alpha);
+      ctx.beginPath();
+      ctx.moveTo(0, -size * 0.75);
+      ctx.quadraticCurveTo(size * 0.9, -size * 0.1, 0, size * 0.9);
+      ctx.quadraticCurveTo(-size * 0.9, -size * 0.1, 0, -size * 0.75);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const drawSpark = (ctx, cx, cy, length, angle, color, alpha, width = 0.7) => {
+      ctx.save();
+      ctx.strokeStyle = rgba(color, alpha);
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * length, cy + Math.sin(angle) * length);
+      ctx.stroke();
+      ctx.restore();
+    };
+
     const drawSpectralBrush = (ctx, x1, y1, x2, y2, drive = { bands, energy: audioEnergy, force: false }) => {
       const localBands = drive.bands || bands;
       const localEnergy = drive.energy || audioEnergy;
@@ -172,14 +207,19 @@ export default function App() {
       const len = Math.sqrt(dx * dx + dy * dy);
       let nx = 0;
       let ny = 0;
+      let dirX = 0;
+      let dirY = 0;
       if (len > 0) {
         nx = -dy / len;
         ny = dx / len;
+        dirX = dx / len;
+        dirY = dy / len;
       }
 
-      const sizeResponse = clamp(0.05 + brushSizeScale * 0.95, 0.05, 1);
-      const audioBoost = 1 + localEnergy.rms * 0.65 * sizeResponse + localEnergy.peak * 0.8 * sizeResponse;
-      const jitterBase = (localBands.high * 6 + localEnergy.rms * 7) * brush.jitter * audioBoost * sizeResponse;
+      const sizeResponse = clamp(0.25 + brushSizeScale * 0.85, 0.25, 1.15);
+      const audioBoost = clamp(0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6, 0.35, 1.6);
+      const bandBoost = clamp((localBands.low + localBands.mid + localBands.high) / 1.2, 0, 1);
+      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4);
 
       for (let i = 0; i <= steps; i += 1) {
         const t = i / steps;
@@ -189,73 +229,114 @@ export default function App() {
         cx += (Math.random() - 0.5) * jitterBase;
         cy += (Math.random() - 0.5) * jitterBase;
 
-        if (whisper) {
-          const washSize = (brush.baseSize * brushSizeScale * 1.2 + localBands.low * 10 * sizeResponse) * pressure;
+        if (brush.style === "mist") {
+          const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
           ctx.fillStyle = rgba(mistRgb, 0.08 * brush.flow * opacityScale);
           ctx.beginPath();
-          ctx.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        if (localBands.low > 0.03) {
-          const lowBand = localBands.low * sizeResponse;
-          const offset = (Math.random() - 0.5) * 14 * lowBand * brush.spread;
-          const bx = cx + nx * offset;
-          const by = cy + ny * offset;
-
-          const size = (brush.baseSize * brushSizeScale * 0.35 + lowBand * 8) * pressure * audioBoost;
-          const alpha = 0.07 * lowBand * brush.flow * (whisper ? 0.5 : 1) * opacityScale;
-
-          ctx.fillStyle = rgba(deepRgb, alpha);
-          ctx.beginPath();
-          ctx.ellipse(bx, by, size, size * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
 
-          if (Math.random() < 0.08 * lowBand) {
-            const stainSize = size * (1.4 + lowBand);
-            addStain(ctx, bx, by, stainSize, baseRgb, lowBand * 0.6);
+          if (Math.random() < 0.15 + bandBoost * 0.4) {
+            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, 0.4 + bandBoost * 0.5);
           }
         }
 
-        if (localBands.mid > 0.02) {
-          const midBand = localBands.mid * sizeResponse;
-          const widthBoost = whisper ? 1.5 : 1;
-          const brushWidth = (brush.baseSize * brushSizeScale * brush.spread + midBand * 8) * pressure * widthBoost * audioBoost;
-          const bristles = Math.max(6, Math.round(brush.bristles + midBand * 8));
+        if (brush.style === "rake") {
+          const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
+          const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
+          const alphaBase = (0.1 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * opacityScale;
 
           for (let b = 0; b < bristles; b += 1) {
-            const spread = (Math.random() - 0.5) * brushWidth * 2;
-
-            if (speed > 0.6 && Math.random() > brush.flow) continue;
-
+            if (Math.random() < brush.grain * 0.2) continue;
+            const spread = (Math.random() - 0.5) * rakeWidth * brush.spread * 2;
             const mx = cx + nx * spread;
             const my = cy + ny * spread;
-
-            const size = (0.4 + Math.random() * 0.8) * pressure * (whisper ? 0.8 : 1) * brushSizeScale;
-
-            let alpha = 0.5 * midBand * brush.flow;
-            if (whisper) alpha *= 0.45;
-            alpha *= opacityScale;
-
-            if (Math.random() < brush.grain * 0.3) continue;
-
-            ctx.fillStyle = rgba(baseRgb, alpha);
+            const length = (3 + Math.random() * 8 + localBands.low * 12) * sizeResponse;
+            const width = (0.4 + Math.random() * 0.6) * sizeResponse;
+            ctx.strokeStyle = rgba(deepRgb, alphaBase * (0.6 + Math.random() * 0.5));
+            ctx.lineWidth = width;
             ctx.beginPath();
-            ctx.arc(mx, my, size, 0, Math.PI * 2);
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx + dirX * length, my + dirY * length);
+            ctx.stroke();
+          }
+        }
+
+        if (brush.style === "petal") {
+          const petals = 2 + Math.floor(localBands.mid * 4);
+          const baseSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.mid * 6) * pressure * sizeResponse;
+          for (let p = 0; p < petals; p += 1) {
+            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2 + (p * Math.PI) / petals;
+            const offset = (Math.random() - 0.5) * brush.spread * 6 * sizeResponse;
+            drawPetalStamp(
+              ctx,
+              cx + nx * offset,
+              cy + ny * offset,
+              baseSize * (0.8 + Math.random() * 0.6),
+              angle,
+              baseRgb,
+              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+            );
+          }
+          if (Math.random() < 0.2 + bandBoost * 0.3) {
+            addStain(ctx, cx, cy, baseSize * 1.2, baseRgb, 0.4 + bandBoost * 0.4);
+          }
+        }
+
+        if (brush.style === "scales") {
+          const layers = 1 + Math.floor(localBands.low * 3);
+          const baseSize = (brush.baseSize * brushSizeScale * 0.55 + localBands.low * 8) * pressure * sizeResponse;
+          for (let s = 0; s < layers; s += 1) {
+            const offset = (Math.random() - 0.5) * brush.spread * 10 * sizeResponse;
+            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.4;
+            drawScaleStamp(
+              ctx,
+              cx + nx * offset,
+              cy + ny * offset,
+              baseSize * (0.7 + Math.random() * 0.6),
+              angle,
+              deepRgb,
+              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+            );
+          }
+        }
+
+        if (brush.style === "spark") {
+          const burst = Math.max(localBands.high, localEnergy.peak);
+          const sparkCount = 2 + Math.floor(burst * 6);
+          for (let s = 0; s < sparkCount; s += 1) {
+            const angle = Math.random() * Math.PI * 2;
+            const length = (4 + Math.random() * 12) * (0.5 + burst) * sizeResponse;
+            drawSpark(ctx, cx, cy, length, angle, mistRgb, 0.35 + burst * 0.5, 0.4 + Math.random() * 0.8);
+          }
+          if (Math.random() < 0.5 + burst * 0.4) {
+            const scatter = (8 + burst * 22) * brush.spread;
+            const hx = cx + (Math.random() - 0.5) * scatter;
+            const hy = cy + (Math.random() - 0.5) * scatter;
+            const size = (0.5 + Math.random() * (1 + burst * 1.2)) * sizeResponse;
+            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale);
+            ctx.beginPath();
+            ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
           }
         }
 
-        const splashIntensity = Math.max(localBands.high * sizeResponse, localEnergy.peak * sizeResponse);
-        if (splashIntensity > 0.1) {
-          if (Math.random() < 0.3 + splashIntensity * 0.6) {
-            const scatter = (6 + splashIntensity * 28) * brush.spread;
+        if (whisper && brush.style !== "mist") {
+          const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
+          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * opacityScale);
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, hazeSize, hazeSize * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const splashIntensity = Math.max(localBands.high, localEnergy.peak);
+        if (splashIntensity > 0.08) {
+          if (Math.random() < 0.25 + splashIntensity * 0.6) {
+            const scatter = (6 + splashIntensity * 24) * brush.spread;
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
-
-            const size = (0.4 + Math.random() * (0.8 + splashIntensity)) * brushSizeScale;
-            const alpha = 0.75 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
-
+            const size = (0.4 + Math.random() * (1 + splashIntensity)) * sizeResponse;
+            const alpha = 0.6 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
             ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
@@ -263,19 +344,14 @@ export default function App() {
           }
 
           if (Math.random() < 0.12 * splashIntensity) {
-            const len = 10 * splashIntensity;
+            const len = 8 + 12 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
-            ctx.strokeStyle = rgba(mistRgb, 0.5 * splashIntensity * opacityScale);
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
-            ctx.stroke();
+            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.35 * splashIntensity * opacityScale, 0.5);
           }
 
-          if (localEnergy.peak > 0.2 && Math.random() < 0.6) {
+          if (localEnergy.peak > 0.18 && Math.random() < 0.5) {
             addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
-            addStain(ctx, cx, cy, 16 + localEnergy.peak * 28, baseRgb, localEnergy.peak);
+            addStain(ctx, cx, cy, 14 + localEnergy.peak * 26, baseRgb, localEnergy.peak);
           }
         }
       }
