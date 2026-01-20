@@ -809,7 +809,7 @@ export default function App() {
     paper.addEventListener("pointerdown", handleDown);
     paper.addEventListener("pointermove", handleMove);
     paper.addEventListener("pointerup", handleUp);
-    window.addEventListener("touchmove", preventTouch, { passive: false });
+    paper.addEventListener("touchmove", preventTouch, { passive: false });
 
     const cleanupPreview = setupPreviewCanvas();
     const cleanupSize = setupBrushSizeControls();
@@ -836,7 +836,7 @@ export default function App() {
       paper.removeEventListener("pointerdown", handleDown);
       paper.removeEventListener("pointermove", handleMove);
       paper.removeEventListener("pointerup", handleUp);
-      window.removeEventListener("touchmove", preventTouch);
+      paper.removeEventListener("touchmove", preventTouch);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
     };
