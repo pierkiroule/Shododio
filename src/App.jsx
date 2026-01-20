@@ -1,17 +1,24 @@
 import { useEffect, useRef } from "react";
 
 const brushes = [
-  { id: "senbon", name: "Senbon", style: "rake", baseSize: 8, bristles: 18, spread: 1.2, flow: 0.7, jitter: 0.45, grain: 0.35 },
-  { id: "kumo", name: "Kumo", style: "mist", baseSize: 12, bristles: 8, spread: 1.4, flow: 0.35, jitter: 0.2, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 },
-  { id: "hana", name: "Hana", style: "petal", baseSize: 14, bristles: 6, spread: 1.8, flow: 0.5, jitter: 0.2, grain: 0.2 },
-  { id: "hibana", name: "Hibana", style: "spark", baseSize: 6, bristles: 6, spread: 2.2, flow: 0.9, jitter: 0.6, grain: 0.1 }
+  { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.25, flow: 0.75, jitter: 0.55, grain: 0.5 },
+  { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.8, flow: 0.28, jitter: 0.18, grain: 0.2 },
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.7, flow: 0.55, jitter: 0.3, grain: 0.75 },
+  { id: "hana", name: "Hana", style: "petal", baseSize: 14, bristles: 6, spread: 2.1, flow: 0.65, jitter: 0.22, grain: 0.15 },
+  { id: "hibana", name: "Hibana", style: "spark", baseSize: 5, bristles: 6, spread: 2.6, flow: 1.05, jitter: 0.8, grain: 0.1 },
+  { id: "mizu", name: "Mizu", style: "water", baseSize: 20, bristles: 5, spread: 2.4, flow: 0.6, jitter: 0.25, grain: 0.05 },
+  { id: "enso", name: "Enso", style: "halo", baseSize: 18, bristles: 8, spread: 2.2, flow: 0.4, jitter: 0.15, grain: 0.15 }
 ];
 
 const inkPalette = [
   { id: "sumi", name: "Sumi Noir", value: "#14110f" },
   { id: "ai", name: "Aï Indigo", value: "#2c3b52" },
-  { id: "shu", name: "Shu Vermillon", value: "#b73a26" }
+  { id: "shu", name: "Shu Vermillon", value: "#b73a26" },
+  { id: "yuzu", name: "Yuzu Jaune", value: "#f4c542" },
+  { id: "midori", name: "Midori Vert", value: "#3c7a4d" },
+  { id: "koke", name: "Koke Mousse", value: "#6a7d3c" },
+  { id: "momo", name: "Momo Rose", value: "#d8a3b6" },
+  { id: "kohaku", name: "Kohaku Ambre", value: "#c47d33" }
 ];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -32,7 +39,7 @@ const mixColor = (rgb, target, amount) => ({
   b: Math.round(rgb.b + (target.b - rgb.b) * amount)
 });
 
-const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1)})`;
 
 export default function App() {
   const canvasRef = useRef(null);
@@ -55,7 +62,7 @@ export default function App() {
     let timeLimit = 7000;
     let remainingTime = 0;
     const CANVAS_SCALE = 3;
-    const MIN_BRUSH_SCALE = 0.12;
+    const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
     const bands = { low: 0, mid: 0, high: 0 };
@@ -232,6 +239,27 @@ export default function App() {
           }
         }
 
+        if (brush.style === "water") {
+          const washSize = (brush.baseSize * brushSizeScale * 1.6 + localBands.low * 22) * pressure * sizeResponse;
+          ctx.save();
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.fillStyle = `rgba(0, 0, 0, ${clamp(0.04 + localEnergy.rms * 0.12, 0, 0.2)})`;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          if (Math.random() < 0.25 + bandBoost * 0.3) {
+            ctx.save();
+            ctx.globalCompositeOperation = "screen";
+            ctx.fillStyle = rgba({ r: 255, g: 255, b: 255 }, 0.05 + localEnergy.rms * 0.15);
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, washSize * 0.75, washSize * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
@@ -312,6 +340,35 @@ export default function App() {
           }
         }
 
+        if (brush.style === "halo") {
+          const filamentCount = 24 + Math.floor(localBands.high * 48);
+          const baseRadius = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 26) * (0.7 + bandBoost * 0.6);
+          const radialJitter = 2 + localBands.high * 10 + localEnergy.rms * 8;
+          const filamentLength = 4 + localBands.high * 16 + localEnergy.peak * 10;
+          const angleSeed = Math.random() * Math.PI * 2;
+          ctx.save();
+          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.35) * brush.flow * opacityScale);
+          ctx.lineWidth = 0.35 * sizeResponse;
+          ctx.beginPath();
+          for (let f = 0; f < filamentCount; f += 1) {
+            const angle = angleSeed + (f / filamentCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+            const radius = baseRadius + Math.sin(angle * 3) * radialJitter + (Math.random() - 0.5) * radialJitter;
+            const ax = cx + Math.cos(angle) * radius;
+            const ay = cy + Math.sin(angle) * radius;
+            const bx = cx + Math.cos(angle) * (radius + filamentLength);
+            const by = cy + Math.sin(angle) * (radius + filamentLength);
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = rgba(mistRgb, 0.08 * opacityScale);
+          ctx.lineWidth = 0.6 * sizeResponse;
+          ctx.beginPath();
+          ctx.arc(cx, cy, baseRadius * 0.7, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (whisper && brush.style !== "mist") {
           const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
           ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * opacityScale);
@@ -359,7 +416,7 @@ export default function App() {
       const sizeValue = document.getElementById("size-value");
       const updateSizing = (value) => {
         const numeric = parseFloat(value);
-        const normalized = clamp(numeric, 0, 1.2);
+        const normalized = clamp(numeric, 0, 3);
         brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
         sizeValue.textContent = `${Math.round(normalized * 100)}%`;
       };
@@ -377,7 +434,7 @@ export default function App() {
       const opacityValue = document.getElementById("opacity-value");
       const updateOpacity = (value) => {
         const numeric = parseFloat(value);
-        opacityScale = clamp(numeric, 0.2, 1);
+        opacityScale = clamp(numeric, 0.05, 1.4);
         opacityValue.textContent = `${Math.round(opacityScale * 100)}%`;
       };
       const onInput = (event) => updateOpacity(event.target.value);
@@ -818,14 +875,14 @@ export default function App() {
           <div className="control-block slider-block">
             <div className="control-label">Taille</div>
             <div className="size-row">
-              <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
+              <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
               <span id="size-value" className="size-value">100%</span>
             </div>
           </div>
           <div className="control-block slider-block">
             <div className="control-label">Opacité</div>
             <div className="size-row">
-              <input id="opacity-range" type="range" min="0.2" max="1" step="0.05" defaultValue="0.85" />
+              <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
             </div>
           </div>
