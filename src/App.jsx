@@ -93,6 +93,7 @@ export default function App() {
     const exportMenu = document.getElementById("export-menu");
     const layeringToggle = document.getElementById("layering-toggle");
     const layeringValue = document.getElementById("layering-value");
+    const guideMarker = document.getElementById("guide-marker");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -105,6 +106,25 @@ export default function App() {
       }
     };
 
+    const markerState = {
+      x: 0,
+      y: 0,
+      dragging: false,
+      offsetX: 0,
+      offsetY: 0
+    };
+
+    const clampMarker = (value, max) => clamp(value, 0, Math.max(0, max));
+
+    const setMarkerPosition = (x, y) => {
+      if (!guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      markerState.x = clampMarker(x, rect.width);
+      markerState.y = clampMarker(y, rect.height);
+      guideMarker.style.left = `${markerState.x}px`;
+      guideMarker.style.top = `${markerState.y}px`;
+    };
+
     const resizeCanvas = () => {
       const rect = canvasWrap.getBoundingClientRect();
       const width = Math.max(1, Math.floor(rect.width * CANVAS_SCALE));
@@ -113,6 +133,36 @@ export default function App() {
       paper.width = width;
       paper.height = height;
       clearAll();
+      if (guideMarker) {
+        setMarkerPosition(markerState.x, markerState.y);
+      }
+    };
+
+    const onMarkerDown = (event) => {
+      if (!guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      markerState.dragging = true;
+      guideMarker.classList.add("dragging");
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      markerState.offsetX = pointerX - markerState.x;
+      markerState.offsetY = pointerY - markerState.y;
+      guideMarker.setPointerCapture(event.pointerId);
+    };
+
+    const onMarkerMove = (event) => {
+      if (!markerState.dragging || !guideMarker || !canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      const nextX = event.clientX - rect.left - markerState.offsetX;
+      const nextY = event.clientY - rect.top - markerState.offsetY;
+      setMarkerPosition(nextX, nextY);
+    };
+
+    const onMarkerUp = (event) => {
+      if (!markerState.dragging || !guideMarker) return;
+      markerState.dragging = false;
+      guideMarker.classList.remove("dragging");
+      guideMarker.releasePointerCapture(event.pointerId);
     };
 
     const addSplatter = (ctx, cx, cy, intensity, baseRgb) => {
@@ -796,6 +846,14 @@ export default function App() {
     updateCycleStatus();
     saveVideoBtn.disabled = true;
     resetVoiceState();
+    if (guideMarker && canvasWrap) {
+      const rect = canvasWrap.getBoundingClientRect();
+      setMarkerPosition(rect.width * 0.5, rect.height * 0.5);
+      guideMarker.addEventListener("pointerdown", onMarkerDown);
+      window.addEventListener("pointermove", onMarkerMove);
+      window.addEventListener("pointerup", onMarkerUp);
+      window.addEventListener("pointercancel", onMarkerUp);
+    }
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -813,6 +871,12 @@ export default function App() {
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
+      if (guideMarker) {
+        guideMarker.removeEventListener("pointerdown", onMarkerDown);
+      }
+      window.removeEventListener("pointermove", onMarkerMove);
+      window.removeEventListener("pointerup", onMarkerUp);
+      window.removeEventListener("pointercancel", onMarkerUp);
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, []);
@@ -828,6 +892,9 @@ export default function App() {
       <div className="canvas-area" ref={canvasWrapRef}>
         <canvas id="paper-layer" ref={canvasRef}></canvas>
         <div className="paper-texture"></div>
+        <div id="guide-marker" className="guide-marker" aria-hidden="true">
+          <div className="guide-marker__core"></div>
+        </div>
         <div id="ui-layer" className="ui-layer">
           <div className="top-ui">
             <div id="status-msg">
