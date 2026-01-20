@@ -3,7 +3,9 @@ import { useEffect, useRef } from "react";
 const brushes = [
   { id: "senbon", name: "Senbon", style: "rake", baseSize: 8, bristles: 18, spread: 1.2, flow: 0.7, jitter: 0.45, grain: 0.35 },
   { id: "kumo", name: "Kumo", style: "mist", baseSize: 12, bristles: 8, spread: 1.4, flow: 0.35, jitter: 0.2, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 }
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 },
+  { id: "hana", name: "Hana", style: "petal", baseSize: 14, bristles: 6, spread: 1.8, flow: 0.5, jitter: 0.2, grain: 0.2 },
+  { id: "hibana", name: "Hibana", style: "spark", baseSize: 6, bristles: 6, spread: 2.2, flow: 0.9, jitter: 0.6, grain: 0.1 }
 ];
 
 const inkPalette = [
@@ -789,6 +791,16 @@ export default function App() {
           <div className="action-area">
             <button id="main-btn" className="main-btn">Peindre</button>
             <button id="stop-btn" className="main-btn secondary">Stop</button>
+            <div className="action-controls">
+              <button id="reset-btn" className="chip-btn" type="button">Reset</button>
+              <div className="export-wrap">
+                <button id="export-toggle" className="chip-btn" type="button">Exporter</button>
+                <div id="export-menu" className="export-menu">
+                  <button id="save-btn" className="chip-btn" type="button">Image</button>
+                  <button id="save-video-btn" className="chip-btn" type="button">Audio/Vidéo</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -823,16 +835,6 @@ export default function App() {
               <input id="layering-toggle" type="checkbox" defaultChecked />
               <span id="layering-value" className="size-value">Superposer</span>
             </label>
-          </div>
-          <div className="control-block actions-block">
-            <button id="reset-btn" className="chip-btn" type="button">Relancer</button>
-            <div className="export-wrap">
-              <button id="export-toggle" className="chip-btn" type="button">Exporter</button>
-              <div id="export-menu" className="export-menu">
-                <button id="save-btn" className="chip-btn" type="button">Image</button>
-                <button id="save-video-btn" className="chip-btn" type="button">Audio/Vidéo</button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
