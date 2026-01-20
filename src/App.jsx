@@ -66,6 +66,7 @@ export default function App() {
     let activeBrush = brushes[0];
     let activeInk = inkPalette[0];
     let resizeObserver;
+    let allowLayering = true;
     let lastFrameTime = performance.now();
     const voiceState = {
       x: 0,
@@ -81,6 +82,8 @@ export default function App() {
     const specViz = document.getElementById("spectrum-viz");
     const exportToggle = document.getElementById("export-toggle");
     const exportMenu = document.getElementById("export-menu");
+    const layeringToggle = document.getElementById("layering-toggle");
+    const layeringValue = document.getElementById("layering-value");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -422,6 +425,19 @@ export default function App() {
 
     };
 
+    const setupLayeringControl = () => {
+      const updateLayering = (checked) => {
+        allowLayering = checked;
+        layeringValue.textContent = checked ? "Superposer" : "Nettoyer";
+      };
+      const onToggle = (event) => updateLayering(event.target.checked);
+      layeringToggle.addEventListener("change", onToggle);
+      updateLayering(layeringToggle.checked);
+      return () => {
+        layeringToggle.removeEventListener("change", onToggle);
+      };
+    };
+
     const setupRecorder = () => {
       try {
         const canvasStream = paper.captureStream(30);
@@ -596,6 +612,7 @@ export default function App() {
 
       recDot.classList.add("active");
       mainBtn.style.display = "none";
+      stopBtn.style.display = "inline-flex";
       timerContainer.style.opacity = 1;
       specViz.style.opacity = 1;
       statusText.innerText = "Voix en peinture...";
@@ -604,7 +621,7 @@ export default function App() {
     };
 
     const startCycle = () => {
-      clearAll();
+      if (!allowLayering) clearAll();
       exportMenu.classList.remove("active");
       startDrawingCycle();
     };
@@ -615,7 +632,9 @@ export default function App() {
       }
 
       timerContainer.style.opacity = 0;
-      mainBtn.style.display = "none";
+      mainBtn.innerText = "Nouveau cycle";
+      mainBtn.style.display = "block";
+      stopBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
       recDot.classList.remove("active");
     };
@@ -630,6 +649,7 @@ export default function App() {
 
       mainBtn.innerText = "Peindre";
       mainBtn.style.display = "block";
+      stopBtn.style.display = "none";
 
       timerContainer.style.opacity = 0;
       updateCycleStatus();
@@ -668,6 +688,7 @@ export default function App() {
     const resetBtn = document.getElementById("reset-btn");
     const saveBtn = document.getElementById("save-btn");
     const saveVideoBtn = document.getElementById("save-video-btn");
+    const stopBtn = document.getElementById("stop-btn");
 
     const onSave = () => {
       const a = document.createElement("a");
@@ -694,14 +715,23 @@ export default function App() {
       if (phase === "READY") startCycle();
     };
 
+    const onStop = () => {
+      if (phase === "DRAWING") {
+        phase = "FINISHED";
+        finishRitual();
+      }
+    };
+
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
     saveBtn.addEventListener("click", onSave);
     saveVideoBtn.addEventListener("click", onSaveVideo);
     exportToggle.addEventListener("click", onExportToggle);
     mainBtn.addEventListener("click", onMainClick);
+    stopBtn.addEventListener("click", onStop);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
+    const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
@@ -715,12 +745,14 @@ export default function App() {
     return () => {
       cleanupSize();
       cleanupOpacity();
+      cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
       saveBtn.removeEventListener("click", onSave);
       saveVideoBtn.removeEventListener("click", onSaveVideo);
       exportToggle.removeEventListener("click", onExportToggle);
       mainBtn.removeEventListener("click", onMainClick);
+      stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
     };
@@ -756,6 +788,7 @@ export default function App() {
 
           <div className="action-area">
             <button id="main-btn" className="main-btn">Peindre</button>
+            <button id="stop-btn" className="main-btn secondary">Stop</button>
           </div>
         </div>
       </div>
@@ -783,6 +816,13 @@ export default function App() {
               <input id="opacity-range" type="range" min="0.2" max="1" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
             </div>
+          </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Cycles</div>
+            <label className="size-row toggle-row">
+              <input id="layering-toggle" type="checkbox" defaultChecked />
+              <span id="layering-value" className="size-value">Superposer</span>
+            </label>
           </div>
           <div className="control-block actions-block">
             <button id="reset-btn" className="chip-btn" type="button">Relancer</button>

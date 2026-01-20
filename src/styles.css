@@ -321,6 +321,16 @@ canvas {
   border: 1px solid var(--ink);
 }
 
+#stop-btn {
+  display: none;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
+}
+
 .overlay {
   position: fixed;
   inset: 0;
