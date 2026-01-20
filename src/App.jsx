@@ -87,6 +87,10 @@ export default function App() {
     let countdownTimer;
     let countdownValue = 0;
     let countdownActive = false;
+    let kiaiEnergy = 0;
+    let kiaiLocked = 0;
+    let kiaiCharging = false;
+    let lastKiaiUpdate = performance.now();
 
     const mainBtn = document.getElementById("main-btn");
     const secBtn = document.getElementById("secondary-btn");
@@ -95,6 +99,10 @@ export default function App() {
     const timerContainer = document.getElementById("timer-container");
     const specViz = document.getElementById("spectrum-viz");
     const countdownDisplay = document.getElementById("countdown-display");
+    const kiaiWrap = document.getElementById("kiai-wrap");
+    const kiaiBtn = document.getElementById("kiai-btn");
+    const kiaiFill = document.getElementById("kiai-fill");
+    const kiaiValue = document.getElementById("kiai-value");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -186,6 +194,7 @@ export default function App() {
     const drawSpectralBrush = (ctx, x1, y1, x2, y2, drive = { bands, energy: audioEnergy, force: false }) => {
       const localBands = drive.bands || bands;
       const localEnergy = drive.energy || audioEnergy;
+      const kiaiBoost = 0.75 + kiaiLocked * 0.65;
       const totalVol = localBands.low + localBands.mid + localBands.high + localEnergy.rms;
       if (!drive.force && totalVol < SILENCE_THRESHOLD) return;
 
@@ -216,8 +225,8 @@ export default function App() {
         dirY = dy / len;
       }
 
-      const sizeResponse = clamp(0.25 + brushSizeScale * 0.85, 0.25, 1.15);
-      const audioBoost = clamp(0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6, 0.35, 1.6);
+      const sizeResponse = clamp((0.25 + brushSizeScale * 0.85) * (0.9 + kiaiBoost * 0.2), 0.25, 1.4);
+      const audioBoost = clamp((0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6) * kiaiBoost, 0.35, 1.8);
       const bandBoost = clamp((localBands.low + localBands.mid + localBands.high) / 1.2, 0, 1);
       const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4);
 
@@ -244,7 +253,7 @@ export default function App() {
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
-          const alphaBase = (0.1 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * opacityScale;
+          const alphaBase = (0.1 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * opacityScale * kiaiBoost;
 
           for (let b = 0; b < bristles; b += 1) {
             if (Math.random() < brush.grain * 0.2) continue;
@@ -275,7 +284,7 @@ export default function App() {
               baseSize * (0.8 + Math.random() * 0.6),
               angle,
               baseRgb,
-              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale * kiaiBoost
             );
           }
           if (Math.random() < 0.2 + bandBoost * 0.3) {
@@ -296,7 +305,7 @@ export default function App() {
               baseSize * (0.7 + Math.random() * 0.6),
               angle,
               deepRgb,
-              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale * kiaiBoost
             );
           }
         }
@@ -314,7 +323,7 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.5 + Math.random() * (1 + burst * 1.2)) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale);
+            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale * kiaiBoost);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
@@ -336,7 +345,7 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.4 + Math.random() * (1 + splashIntensity)) * sizeResponse;
-            const alpha = 0.6 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
+            const alpha = 0.6 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale * kiaiBoost;
             ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
@@ -684,9 +693,7 @@ export default function App() {
         return;
       }
       if (lx !== undefined) {
-        if (phase === "DRAWING") {
-          drawSpectralBrush(ctxP, lx, ly, x, y);
-        } else if (phase === "READY" || phase === "PAUSED") {
+        if (phase === "READY" || phase === "PAUSED") {
           drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
         }
       }
@@ -695,6 +702,7 @@ export default function App() {
     };
 
     const handleDown = (event) => {
+      if (phase !== "READY" && phase !== "PAUSED") return;
       isDown = true;
       const { x, y } = getPointerPos(event);
       lx = x;
@@ -717,6 +725,8 @@ export default function App() {
 
     const startDrawingCycle = () => {
       phase = "DRAWING";
+      kiaiLocked = kiaiEnergy;
+      kiaiCharging = false;
       timeLimit = getCycleDuration();
       startTime = Date.now();
       remainingTime = timeLimit;
@@ -732,6 +742,8 @@ export default function App() {
       secBtn.style.display = "none";
       timerContainer.style.opacity = 1;
       specViz.style.opacity = 1;
+      kiaiWrap.classList.remove("active");
+      kiaiWrap.classList.add("locked");
       if (cycleMode === "haiku") {
         statusText.innerText = `Encre haïku — cycle ${cycleIndex + 1}/3`;
       } else {
@@ -748,17 +760,23 @@ export default function App() {
       }
       countdownActive = false;
       countdownDisplay.classList.remove("active");
+      kiaiWrap.classList.remove("active");
+      kiaiCharging = false;
     };
 
     const beginCountdown = () => {
       if (countdownActive) return;
       stopCountdown();
       phase = "COUNTDOWN";
-      statusText.innerText = "Départ imminent";
+      statusText.innerText = "Charge Kiai — souffle tenu";
       countdownValue = 3;
       countdownActive = true;
+      kiaiEnergy = 0;
+      kiaiLocked = 0;
       countdownDisplay.textContent = countdownValue.toString();
       countdownDisplay.classList.add("active");
+      kiaiWrap.classList.add("active");
+      kiaiWrap.classList.remove("locked");
       countdownTimer = window.setInterval(() => {
         countdownValue -= 1;
         countdownDisplay.textContent = countdownValue.toString();
@@ -807,6 +825,7 @@ export default function App() {
       }
 
       timerContainer.style.opacity = 0;
+      kiaiWrap.classList.remove("locked");
       mainBtn.style.display = "none";
       secBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
@@ -823,6 +842,9 @@ export default function App() {
     const resetRitual = () => {
       phase = "READY";
       stopCountdown();
+      kiaiEnergy = 0;
+      kiaiLocked = 0;
+      kiaiCharging = false;
       clearAll();
       recordedChunks = [];
       cycleIndex = 0;
@@ -832,11 +854,33 @@ export default function App() {
       secBtn.style.display = "none";
 
       timerContainer.style.opacity = 0;
+      kiaiWrap.classList.remove("active");
+      kiaiWrap.classList.remove("locked");
       updateCycleStatus();
       recDot.classList.remove("active");
     };
 
     const loop = () => {
+      const now = performance.now();
+      const delta = Math.max(0, now - lastKiaiUpdate) / 1000;
+      lastKiaiUpdate = now;
+      if (phase === "COUNTDOWN") {
+        const chargeRate = 0.65;
+        const decayRate = 0.45;
+        if (kiaiCharging) {
+          kiaiEnergy = clamp(kiaiEnergy + delta * chargeRate, 0, 1);
+        } else {
+          kiaiEnergy = clamp(kiaiEnergy - delta * decayRate, 0, 1);
+        }
+      } else if (phase === "DRAWING") {
+        kiaiEnergy = kiaiLocked;
+      }
+
+      if (kiaiFill && kiaiValue) {
+        kiaiFill.style.transform = `scaleX(${kiaiEnergy})`;
+        kiaiValue.textContent = `${Math.round(kiaiEnergy * 100)}%`;
+      }
+
       if (phase === "DRAWING") {
         const elapsed = Date.now() - startTime;
         remainingTime = Math.max(0, timeLimit - elapsed);
@@ -908,6 +952,25 @@ export default function App() {
     mainBtn.addEventListener("click", onMainClick);
     secBtn.addEventListener("click", onSecondaryClick);
 
+    const onKiaiDown = (event) => {
+      if (phase !== "COUNTDOWN") return;
+      kiaiCharging = true;
+      if (event.pointerId !== undefined) {
+        kiaiBtn.setPointerCapture(event.pointerId);
+      }
+    };
+
+    const onKiaiUp = (event) => {
+      kiaiCharging = false;
+      if (event.pointerId !== undefined) {
+        kiaiBtn.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    kiaiBtn.addEventListener("pointerdown", onKiaiDown);
+    kiaiBtn.addEventListener("pointerup", onKiaiUp);
+    kiaiBtn.addEventListener("pointerleave", onKiaiUp);
+
     paper.addEventListener("pointerdown", handleDown);
     paper.addEventListener("pointermove", handleMove);
     paper.addEventListener("pointerup", handleUp);
@@ -937,6 +1000,9 @@ export default function App() {
       zoomBtn.removeEventListener("click", onZoomToggle);
       mainBtn.removeEventListener("click", onMainClick);
       secBtn.removeEventListener("click", onSecondaryClick);
+      kiaiBtn.removeEventListener("pointerdown", onKiaiDown);
+      kiaiBtn.removeEventListener("pointerup", onKiaiUp);
+      kiaiBtn.removeEventListener("pointerleave", onKiaiUp);
       paper.removeEventListener("pointerdown", handleDown);
       paper.removeEventListener("pointermove", handleMove);
       paper.removeEventListener("pointerup", handleUp);
@@ -987,6 +1053,13 @@ export default function App() {
           <div className="action-area">
             <button id="main-btn" className="main-btn">Lancer le cycle</button>
             <button id="secondary-btn" className="main-btn secondary" style={{ display: "none" }}>Terminer l'oeuvre</button>
+            <div id="kiai-wrap" className="kiai-wrap">
+              <button id="kiai-btn" className="kiai-btn" type="button">Charger Kiai</button>
+              <div className="kiai-meter" aria-hidden="true">
+                <div id="kiai-fill" className="kiai-fill"></div>
+              </div>
+              <span id="kiai-value" className="kiai-value">0%</span>
+            </div>
           </div>
         </div>
       </div>
