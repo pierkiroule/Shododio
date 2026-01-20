@@ -91,6 +91,10 @@ export default function App() {
     let kiaiLocked = 0;
     let kiaiCharging = false;
     let lastKiaiUpdate = performance.now();
+    let autoX;
+    let autoY;
+    let autoAngle = 0;
+    let autoSeed = Math.random() * Math.PI * 2;
 
     const mainBtn = document.getElementById("main-btn");
     const secBtn = document.getElementById("secondary-btn");
@@ -684,6 +688,36 @@ export default function App() {
       };
     };
 
+    const initAutoBrush = () => {
+      autoX = paper.width * (0.35 + Math.random() * 0.3);
+      autoY = paper.height * (0.35 + Math.random() * 0.3);
+      autoAngle = Math.random() * Math.PI * 2;
+      autoSeed = Math.random() * Math.PI * 2;
+    };
+
+    const autoPaint = () => {
+      if (autoX === undefined || autoY === undefined) initAutoBrush();
+      const drive = { bands, energy: audioEnergy, force: true };
+      const intensity = clamp((bands.low + bands.mid + bands.high + audioEnergy.rms) / 2.2, 0, 1);
+      const turn = (Math.sin(performance.now() / 600 + autoSeed) * 0.4 + (bands.high - bands.low) * 0.6) * (0.6 + intensity);
+      autoAngle += turn;
+      const speed = 6 + intensity * 14 + kiaiLocked * 6;
+      const nx = autoX + Math.cos(autoAngle) * speed;
+      const ny = autoY + Math.sin(autoAngle) * speed;
+
+      drawSpectralBrush(ctxP, autoX, autoY, nx, ny, drive);
+
+      autoX = nx;
+      autoY = ny;
+
+      const margin = Math.min(paper.width, paper.height) * 0.08;
+      if (autoX < margin || autoX > paper.width - margin || autoY < margin || autoY > paper.height - margin) {
+        autoAngle += Math.PI * 0.65;
+        autoX = clamp(autoX, margin, paper.width - margin);
+        autoY = clamp(autoY, margin, paper.height - margin);
+      }
+    };
+
     const handleMove = (event) => {
       if (!isDown) return;
       const { x, y } = getPointerPos(event);
@@ -727,6 +761,7 @@ export default function App() {
       phase = "DRAWING";
       kiaiLocked = kiaiEnergy;
       kiaiCharging = false;
+      initAutoBrush();
       timeLimit = getCycleDuration();
       startTime = Date.now();
       remainingTime = timeLimit;
@@ -794,6 +829,8 @@ export default function App() {
 
     const pauseCycle = () => {
       phase = "PAUSED";
+      autoX = undefined;
+      autoY = undefined;
 
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.pause();
@@ -845,6 +882,8 @@ export default function App() {
       kiaiEnergy = 0;
       kiaiLocked = 0;
       kiaiCharging = false;
+      autoX = undefined;
+      autoY = undefined;
       clearAll();
       recordedChunks = [];
       cycleIndex = 0;
@@ -888,6 +927,7 @@ export default function App() {
 
         document.getElementById("timer-display").innerText = (remainingTime / 1000).toFixed(1);
         document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
+        autoPaint();
 
         if (remainingTime <= 0) {
           pauseCycle();
