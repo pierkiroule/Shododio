@@ -1,15 +1,24 @@
 import { useEffect, useRef } from "react";
 
 const brushes = [
-  { id: "senbon", name: "Senbon", style: "rake", baseSize: 8, bristles: 18, spread: 1.2, flow: 0.7, jitter: 0.45, grain: 0.35 },
-  { id: "kumo", name: "Kumo", style: "mist", baseSize: 12, bristles: 8, spread: 1.4, flow: 0.35, jitter: 0.2, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.45, jitter: 0.3, grain: 0.6 }
+  { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.25, flow: 0.75, jitter: 0.55, grain: 0.5 },
+  { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.8, flow: 0.28, jitter: 0.18, grain: 0.2 },
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.7, flow: 0.55, jitter: 0.3, grain: 0.75 },
+  { id: "hana", name: "Hana", style: "petal", baseSize: 14, bristles: 6, spread: 2.1, flow: 0.65, jitter: 0.22, grain: 0.15 },
+  { id: "hibana", name: "Hibana", style: "spark", baseSize: 5, bristles: 6, spread: 2.6, flow: 1.05, jitter: 0.8, grain: 0.1 },
+  { id: "mizu", name: "Mizu", style: "water", baseSize: 20, bristles: 5, spread: 2.4, flow: 0.6, jitter: 0.25, grain: 0.05 },
+  { id: "enso", name: "Enso", style: "halo", baseSize: 18, bristles: 8, spread: 2.2, flow: 0.4, jitter: 0.15, grain: 0.15 }
 ];
 
 const inkPalette = [
   { id: "sumi", name: "Sumi Noir", value: "#14110f" },
   { id: "ai", name: "Aï Indigo", value: "#2c3b52" },
-  { id: "shu", name: "Shu Vermillon", value: "#b73a26" }
+  { id: "shu", name: "Shu Vermillon", value: "#b73a26" },
+  { id: "yuzu", name: "Yuzu Jaune", value: "#f4c542" },
+  { id: "midori", name: "Midori Vert", value: "#3c7a4d" },
+  { id: "koke", name: "Koke Mousse", value: "#6a7d3c" },
+  { id: "momo", name: "Momo Rose", value: "#d8a3b6" },
+  { id: "kohaku", name: "Kohaku Ambre", value: "#c47d33" }
 ];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -30,7 +39,7 @@ const mixColor = (rgb, target, amount) => ({
   b: Math.round(rgb.b + (target.b - rgb.b) * amount)
 });
 
-const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1)})`;
 
 export default function App() {
   const canvasRef = useRef(null);
@@ -52,11 +61,8 @@ export default function App() {
     let startTime = 0;
     let timeLimit = 7000;
     let remainingTime = 0;
-    let isDown = false;
-    let lx;
-    let ly;
     const CANVAS_SCALE = 3;
-    const MIN_BRUSH_SCALE = 0.12;
+    const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
     const bands = { low: 0, mid: 0, high: 0 };
@@ -69,6 +75,14 @@ export default function App() {
     let activeBrush = brushes[0];
     let activeInk = inkPalette[0];
     let resizeObserver;
+    let allowLayering = true;
+    let lastFrameTime = performance.now();
+    const voiceState = {
+      x: 0,
+      y: 0,
+      angle: 0,
+      velocity: 0
+    };
 
     const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
@@ -77,6 +91,8 @@ export default function App() {
     const specViz = document.getElementById("spectrum-viz");
     const exportToggle = document.getElementById("export-toggle");
     const exportMenu = document.getElementById("export-menu");
+    const layeringToggle = document.getElementById("layering-toggle");
+    const layeringValue = document.getElementById("layering-value");
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -223,6 +239,27 @@ export default function App() {
           }
         }
 
+        if (brush.style === "water") {
+          const washSize = (brush.baseSize * brushSizeScale * 1.6 + localBands.low * 22) * pressure * sizeResponse;
+          ctx.save();
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.fillStyle = `rgba(0, 0, 0, ${clamp(0.04 + localEnergy.rms * 0.12, 0, 0.2)})`;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          if (Math.random() < 0.25 + bandBoost * 0.3) {
+            ctx.save();
+            ctx.globalCompositeOperation = "screen";
+            ctx.fillStyle = rgba({ r: 255, g: 255, b: 255 }, 0.05 + localEnergy.rms * 0.15);
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, washSize * 0.75, washSize * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
@@ -303,6 +340,35 @@ export default function App() {
           }
         }
 
+        if (brush.style === "halo") {
+          const filamentCount = 24 + Math.floor(localBands.high * 48);
+          const baseRadius = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 26) * (0.7 + bandBoost * 0.6);
+          const radialJitter = 2 + localBands.high * 10 + localEnergy.rms * 8;
+          const filamentLength = 4 + localBands.high * 16 + localEnergy.peak * 10;
+          const angleSeed = Math.random() * Math.PI * 2;
+          ctx.save();
+          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.35) * brush.flow * opacityScale);
+          ctx.lineWidth = 0.35 * sizeResponse;
+          ctx.beginPath();
+          for (let f = 0; f < filamentCount; f += 1) {
+            const angle = angleSeed + (f / filamentCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+            const radius = baseRadius + Math.sin(angle * 3) * radialJitter + (Math.random() - 0.5) * radialJitter;
+            const ax = cx + Math.cos(angle) * radius;
+            const ay = cy + Math.sin(angle) * radius;
+            const bx = cx + Math.cos(angle) * (radius + filamentLength);
+            const by = cy + Math.sin(angle) * (radius + filamentLength);
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = rgba(mistRgb, 0.08 * opacityScale);
+          ctx.lineWidth = 0.6 * sizeResponse;
+          ctx.beginPath();
+          ctx.arc(cx, cy, baseRadius * 0.7, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (whisper && brush.style !== "mist") {
           const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
           ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * opacityScale);
@@ -342,23 +408,7 @@ export default function App() {
     };
 
     const updateCycleStatus = () => {
-      statusText.innerText = "Prêt à tracer";
-    };
-
-    const getTestDrive = () => {
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 700);
-      return {
-        bands: {
-          low: clamp(0.2 + pulse * 0.2, 0, 1),
-          mid: clamp(0.4 + pulse * 0.25, 0, 1),
-          high: clamp(0.25 + pulse * 0.2, 0, 1)
-        },
-        energy: {
-          rms: clamp(0.35 + pulse * 0.2, 0, 1),
-          peak: clamp(0.15 + pulse * 0.25, 0, 1)
-        },
-        force: true
-      };
+      statusText.innerText = "Prêt à écouter";
     };
 
     const setupBrushSizeControls = () => {
@@ -366,7 +416,7 @@ export default function App() {
       const sizeValue = document.getElementById("size-value");
       const updateSizing = (value) => {
         const numeric = parseFloat(value);
-        const normalized = clamp(numeric, 0, 1.2);
+        const normalized = clamp(numeric, 0, 3);
         brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
         sizeValue.textContent = `${Math.round(normalized * 100)}%`;
       };
@@ -384,7 +434,7 @@ export default function App() {
       const opacityValue = document.getElementById("opacity-value");
       const updateOpacity = (value) => {
         const numeric = parseFloat(value);
-        opacityScale = clamp(numeric, 0.2, 1);
+        opacityScale = clamp(numeric, 0.05, 1.4);
         opacityValue.textContent = `${Math.round(opacityScale * 100)}%`;
       };
       const onInput = (event) => updateOpacity(event.target.value);
@@ -432,6 +482,19 @@ export default function App() {
         colorContainer.appendChild(chip);
       });
 
+    };
+
+    const setupLayeringControl = () => {
+      const updateLayering = (checked) => {
+        allowLayering = checked;
+        layeringValue.textContent = checked ? "Superposer" : "Nettoyer";
+      };
+      const onToggle = (event) => updateLayering(event.target.checked);
+      layeringToggle.addEventListener("change", onToggle);
+      updateLayering(layeringToggle.checked);
+      return () => {
+        layeringToggle.removeEventListener("change", onToggle);
+      };
     };
 
     const setupRecorder = () => {
@@ -545,49 +608,52 @@ export default function App() {
       return requestAnimationFrame(audioLoop);
     };
 
-    const getPointerPos = (event) => {
-      const rect = paper.getBoundingClientRect();
-      const scaleX = paper.width / rect.width;
-      const scaleY = paper.height / rect.height;
-      return {
-        x: (event.clientX - rect.left) * scaleX,
-        y: (event.clientY - rect.top) * scaleY
-      };
+    const resetVoiceState = () => {
+      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
+      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      voiceState.angle = Math.random() * Math.PI * 2;
+      voiceState.velocity = 0;
+      lastFrameTime = performance.now();
     };
 
-    const handleMove = (event) => {
-      if (!isDown) return;
-      if (event.pointerType === "touch") return;
-      const { x, y } = getPointerPos(event);
-      if (y > paper.height) {
-        lx = x;
-        ly = y;
-        return;
+    const paintFromVoice = (timestamp) => {
+      const delta = Math.min(48, timestamp - lastFrameTime);
+      lastFrameTime = timestamp;
+      const energy = audioEnergy.rms;
+      const burst = audioEnergy.peak;
+      const loudness = clamp(energy + burst * 0.6, 0, 1.2);
+      const targetVelocity = clamp(1.2 + loudness * 18 + bands.mid * 6, 1.2, 24);
+      voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
+
+      const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
+      voiceState.angle += turnAmount;
+
+      const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
+      const dy = Math.sin(voiceState.angle) * voiceState.velocity * (delta / 16);
+      const nx = voiceState.x + dx;
+      const ny = voiceState.y + dy;
+
+      drawSpectralBrush(ctxP, voiceState.x, voiceState.y, nx, ny);
+
+      voiceState.x = nx;
+      voiceState.y = ny;
+
+      const margin = 40 * CANVAS_SCALE;
+      if (voiceState.x < margin) {
+        voiceState.x = margin;
+        voiceState.angle = Math.PI - voiceState.angle;
+      } else if (voiceState.x > paper.width - margin) {
+        voiceState.x = paper.width - margin;
+        voiceState.angle = Math.PI - voiceState.angle;
       }
-      if (lx !== undefined) {
-        if (phase === "DRAWING") {
-          drawSpectralBrush(ctxP, lx, ly, x, y);
-        } else if (phase === "READY") {
-          drawSpectralBrush(ctxP, lx, ly, x, y, getTestDrive());
-        }
+
+      if (voiceState.y < margin) {
+        voiceState.y = margin;
+        voiceState.angle = -voiceState.angle;
+      } else if (voiceState.y > paper.height - margin) {
+        voiceState.y = paper.height - margin;
+        voiceState.angle = -voiceState.angle;
       }
-      lx = x;
-      ly = y;
-    };
-
-    const handleDown = (event) => {
-      if (event.pointerType === "touch") return;
-      isDown = true;
-      const { x, y } = getPointerPos(event);
-      lx = x;
-      ly = y;
-      handleMove(event);
-    };
-
-    const handleUp = () => {
-      isDown = false;
-      lx = undefined;
-      ly = undefined;
     };
 
     const startDrawingCycle = () => {
@@ -595,6 +661,7 @@ export default function App() {
       timeLimit = 7000;
       startTime = Date.now();
       remainingTime = timeLimit;
+      resetVoiceState();
 
       if (mediaRecorder && mediaRecorder.state === "inactive") {
         mediaRecorder.start();
@@ -604,15 +671,16 @@ export default function App() {
 
       recDot.classList.add("active");
       mainBtn.style.display = "none";
+      stopBtn.style.display = "inline-flex";
       timerContainer.style.opacity = 1;
       specViz.style.opacity = 1;
-      statusText.innerText = "Enregistrement en cours...";
+      statusText.innerText = "Voix en peinture...";
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     };
 
     const startCycle = () => {
-      clearAll();
+      if (!allowLayering) clearAll();
       exportMenu.classList.remove("active");
       startDrawingCycle();
     };
@@ -623,7 +691,9 @@ export default function App() {
       }
 
       timerContainer.style.opacity = 0;
-      mainBtn.style.display = "none";
+      mainBtn.innerText = "Nouveau cycle";
+      mainBtn.style.display = "block";
+      stopBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
       recDot.classList.remove("active");
     };
@@ -634,9 +704,11 @@ export default function App() {
       recordedChunks = [];
       lastVideoUrl = undefined;
       saveVideoBtn.disabled = true;
+      resetVoiceState();
 
-      mainBtn.innerText = "Go•°";
+      mainBtn.innerText = "Peindre";
       mainBtn.style.display = "block";
+      stopBtn.style.display = "none";
 
       timerContainer.style.opacity = 0;
       updateCycleStatus();
@@ -652,6 +724,8 @@ export default function App() {
 
         document.getElementById("timer-display").innerText = (remainingTime / 1000).toFixed(1);
         document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
+
+        paintFromVoice(performance.now());
 
         if (remainingTime <= 0) {
           phase = "FINISHED";
@@ -673,6 +747,7 @@ export default function App() {
     const resetBtn = document.getElementById("reset-btn");
     const saveBtn = document.getElementById("save-btn");
     const saveVideoBtn = document.getElementById("save-video-btn");
+    const stopBtn = document.getElementById("stop-btn");
 
     const onSave = () => {
       const a = document.createElement("a");
@@ -696,7 +771,14 @@ export default function App() {
       exportMenu.classList.toggle("active");
     };
     const onMainClick = () => {
-      if (phase === "READY") startCycle();
+      if (phase === "READY" || phase === "FINISHED") startCycle();
+    };
+
+    const onStop = () => {
+      if (phase === "DRAWING") {
+        phase = "FINISHED";
+        finishRitual();
+      }
     };
 
     initBtn.addEventListener("click", onInitClick);
@@ -705,16 +787,15 @@ export default function App() {
     saveVideoBtn.addEventListener("click", onSaveVideo);
     exportToggle.addEventListener("click", onExportToggle);
     mainBtn.addEventListener("click", onMainClick);
-
-    paper.addEventListener("pointerdown", handleDown);
-    paper.addEventListener("pointermove", handleMove);
-    paper.addEventListener("pointerup", handleUp);
+    stopBtn.addEventListener("click", onStop);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
+    const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
     saveVideoBtn.disabled = true;
+    resetVoiceState();
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -723,15 +804,14 @@ export default function App() {
     return () => {
       cleanupSize();
       cleanupOpacity();
+      cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
       saveBtn.removeEventListener("click", onSave);
       saveVideoBtn.removeEventListener("click", onSaveVideo);
       exportToggle.removeEventListener("click", onExportToggle);
       mainBtn.removeEventListener("click", onMainClick);
-      paper.removeEventListener("pointerdown", handleDown);
-      paper.removeEventListener("pointermove", handleMove);
-      paper.removeEventListener("pointerup", handleUp);
+      stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
     };
@@ -741,8 +821,8 @@ export default function App() {
     <div className="app">
       <div id="boot-screen" className="overlay">
         <h1>LA VOIX DU SHODO</h1>
-        <p className="boot-subtitle">RITUEL SPECTRAL</p>
-        <button id="init-btn">Activer le Pinceau</button>
+        <p className="boot-subtitle">RITUEL VOCAL</p>
+        <button id="init-btn">Activer le Micro</button>
       </div>
 
       <div className="canvas-area" ref={canvasWrapRef}>
@@ -752,7 +832,7 @@ export default function App() {
           <div className="top-ui">
             <div id="status-msg">
               <div id="rec-dot"></div>
-              <span id="status-text">Prêt à tracer</span>
+              <span id="status-text">Prêt à écouter</span>
             </div>
             <div id="timer-container">
               <div id="timer-display">7.0</div>
@@ -766,7 +846,18 @@ export default function App() {
           </div>
 
           <div className="action-area">
-            <button id="main-btn" className="main-btn">Go•°</button>
+            <button id="main-btn" className="main-btn">Peindre</button>
+            <button id="stop-btn" className="main-btn secondary">Stop</button>
+            <div className="action-controls">
+              <button id="reset-btn" className="chip-btn" type="button">Reset</button>
+              <div className="export-wrap">
+                <button id="export-toggle" className="chip-btn" type="button">Exporter</button>
+                <div id="export-menu" className="export-menu">
+                  <button id="save-btn" className="chip-btn" type="button">Image</button>
+                  <button id="save-video-btn" className="chip-btn" type="button">Audio/Vidéo</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -784,26 +875,23 @@ export default function App() {
           <div className="control-block slider-block">
             <div className="control-label">Taille</div>
             <div className="size-row">
-              <input id="size-range" type="range" min="0" max="1.2" step="0.05" defaultValue="1" />
+              <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
               <span id="size-value" className="size-value">100%</span>
             </div>
           </div>
           <div className="control-block slider-block">
             <div className="control-label">Opacité</div>
             <div className="size-row">
-              <input id="opacity-range" type="range" min="0.2" max="1" step="0.05" defaultValue="0.85" />
+              <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
             </div>
           </div>
-          <div className="control-block actions-block">
-            <button id="reset-btn" className="chip-btn" type="button">Relancer</button>
-            <div className="export-wrap">
-              <button id="export-toggle" className="chip-btn" type="button">Exporter</button>
-              <div id="export-menu" className="export-menu">
-                <button id="save-btn" className="chip-btn" type="button">Image</button>
-                <button id="save-video-btn" className="chip-btn" type="button">Audio/Vidéo</button>
-              </div>
-            </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Cycles</div>
+            <label className="size-row toggle-row">
+              <input id="layering-toggle" type="checkbox" defaultChecked />
+              <span id="layering-value" className="size-value">Superposer</span>
+            </label>
           </div>
         </div>
       </div>

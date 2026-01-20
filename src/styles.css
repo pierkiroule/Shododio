@@ -196,6 +196,14 @@ canvas {
   gap: 15px;
 }
 
+.action-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .tools-area {
   background: rgba(255, 255, 255, 0.88);
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
@@ -319,6 +327,16 @@ canvas {
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--ink);
+}
+
+#stop-btn {
+  display: none;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
 }
 
 .overlay {
