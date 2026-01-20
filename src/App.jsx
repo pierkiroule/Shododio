@@ -659,8 +659,16 @@ export default function App() {
     };
 
     const resetVoiceState = () => {
-      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
-      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      if (guideMarker && canvasWrap) {
+        const rect = canvasWrap.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? paper.width / rect.width : 1;
+        const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
+        voiceState.x = clampMarker(markerState.x, rect.width) * scaleX;
+        voiceState.y = clampMarker(markerState.y, rect.height) * scaleY;
+      } else {
+        voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
+        voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
+      }
       voiceState.angle = Math.random() * Math.PI * 2;
       voiceState.velocity = 0;
       lastFrameTime = performance.now();
