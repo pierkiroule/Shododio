@@ -1,11 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+const jinkoPreset = {
+  diffusionAbsorption: {
+    capillarite: 0.75,
+    diffusion: 0.7,
+    absorption: 0.65
+  },
+  degradesValeurs: {
+    degrade: 0.85,
+    fondu: 0.9,
+    contraste: 0.25,
+    valeurGlobale: 0.55
+  },
+  humiditeCharge: {
+    humiditeTrait: 0.65,
+    chargeEncre: 0.45,
+    assechementProgressif: 0.6
+  },
+  textureTrait: {
+    granulation: 0.55,
+    striation: 0.4,
+    rugosite: 0.3,
+    lissage: 0.45
+  },
+  bordsContours: {
+    netteteBord: 0.55,
+    diffusionBord: 0.75,
+    dentelure: 0.35,
+    erosion: 0.4
+  },
+  expressiviteGlobale: {
+    organicite: 0.85,
+    tension: 0.2,
+    spontaneite: 0.55,
+    controle: 0.45
+  }
+};
+
 const brushes = [
-  { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.25, flow: 0.75, jitter: 0.55, grain: 0.5 },
-  { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.8, flow: 0.28, jitter: 0.18, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.7, flow: 0.55, jitter: 0.3, grain: 0.75 },
-  { id: "shuto", name: "Shuto", style: "alcohol", baseSize: 18, bristles: 6, spread: 2.4, flow: 0.5, jitter: 0.2, grain: 0.1 },
-  { id: "keisen", name: "Keisen", style: "filament", baseSize: 8, bristles: 12, spread: 1.4, flow: 0.7, jitter: 0.2, grain: 0.15 }
+  { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.2, flow: 0.52, jitter: 0.45, grain: 0.55, halo: 1.05, texture: 1.05, edge: 1.1 },
+  { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.9, flow: 0.42, jitter: 0.22, grain: 0.35, halo: 1.25, texture: 0.85, edge: 0.9 },
+  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.6, flow: 0.5, jitter: 0.3, grain: 0.65, halo: 0.95, texture: 1.1, edge: 1.15 },
+  { id: "shuto", name: "Shuto", style: "alcohol", baseSize: 18, bristles: 6, spread: 2.2, flow: 0.48, jitter: 0.2, grain: 0.2, halo: 1.2, texture: 0.8, edge: 0.95 },
+  { id: "keisen", name: "Keisen", style: "filament", baseSize: 8, bristles: 12, spread: 1.35, flow: 0.55, jitter: 0.25, grain: 0.35, halo: 1.0, texture: 1.15, edge: 1.05 }
 ];
 
 const inkPalette = [
@@ -169,6 +206,8 @@ export default function App() {
     };
 
     const addSplatter = (ctx, cx, cy, intensity, baseRgb) => {
+      const { degradesValeurs } = jinkoPreset;
+      const contrastScale = 0.55 + degradesValeurs.contraste * 0.8;
       const drops = Math.ceil(8 * intensity);
       for (let i = 0; i < drops; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -176,7 +215,7 @@ export default function App() {
         const sx = cx + Math.cos(angle) * radius;
         const sy = cy + Math.sin(angle) * radius;
         const size = (0.8 + Math.random() * 2.6 * intensity) * brushSizeScale;
-        const alpha = 0.32 * intensity * inkFlow;
+        const alpha = 0.28 * intensity * inkFlow * contrastScale;
         const splatterRgb = mixColor(baseRgb, paperRgb, 0.3 + waterRatio * 0.35);
         ctx.fillStyle = rgba(splatterRgb, alpha);
         ctx.beginPath();
@@ -186,11 +225,16 @@ export default function App() {
     };
 
     const addStain = (ctx, cx, cy, size, baseRgb, intensity) => {
+      const { degradesValeurs } = jinkoPreset;
       const radius = Math.max(6, size);
-      const washRgb = mixColor(baseRgb, paperRgb, 0.35 + waterRatio * 0.45);
+      const washRgb = mixColor(
+        baseRgb,
+        paperRgb,
+        0.35 + waterRatio * (0.35 + (1 - degradesValeurs.valeurGlobale) * 0.4)
+      );
       const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius);
-      grad.addColorStop(0, rgba(washRgb, 0.16 * intensity * inkFlow));
-      grad.addColorStop(0.6, rgba(washRgb, 0.05 * intensity * inkFlow));
+      grad.addColorStop(0, rgba(washRgb, 0.14 * intensity * inkFlow * (0.6 + degradesValeurs.fondu * 0.6)));
+      grad.addColorStop(0.6, rgba(washRgb, 0.05 * intensity * inkFlow * (0.6 + degradesValeurs.degrade * 0.5)));
       grad.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -202,25 +246,39 @@ export default function App() {
     };
 
     const addDryEdge = (ctx, cx, cy, size, baseRgb, intensity) => {
+      const { bordsContours } = jinkoPreset;
       const radius = Math.max(8, size * 1.1);
       const edge = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
       edge.addColorStop(0.0, rgba(baseRgb, 0));
-      edge.addColorStop(0.55, rgba(baseRgb, 0.02 * intensity * inkFlow));
-      edge.addColorStop(0.9, rgba(baseRgb, 0.08 * intensity * inkFlow));
+      edge.addColorStop(0.5 + bordsContours.diffusionBord * 0.15, rgba(baseRgb, 0.02 * intensity * inkFlow));
+      edge.addColorStop(0.92, rgba(baseRgb, (0.04 + bordsContours.netteteBord * 0.06) * intensity * inkFlow));
       edge.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = edge;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, radius * 1.05, radius * 0.8, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx,
+        cy,
+        radius * (0.95 + bordsContours.erosion * 0.2),
+        radius * (0.72 + bordsContours.dentelure * 0.25),
+        Math.random() * Math.PI,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
       ctx.restore();
     };
 
     const addWetTrace = (ctx, cx, cy, size, baseRgb, intensity, dirX, dirY) => {
+      const { humiditeCharge } = jinkoPreset;
       const length = size * (1.2 + intensity * 1.6);
       const width = size * (0.4 + intensity * 0.6);
-      const traceColor = mixColor(baseRgb, paperRgb, 0.4 + waterRatio * 0.35);
+      const traceColor = mixColor(
+        baseRgb,
+        paperRgb,
+        0.4 + waterRatio * (0.3 + humiditeCharge.humiditeTrait * 0.3)
+      );
       const grad = ctx.createLinearGradient(
         cx - dirX * length * 0.5,
         cy - dirY * length * 0.5,
@@ -228,8 +286,8 @@ export default function App() {
         cy + dirY * length * 0.6
       );
       grad.addColorStop(0, rgba(traceColor, 0));
-      grad.addColorStop(0.35, rgba(traceColor, 0.05 * intensity * inkFlow));
-      grad.addColorStop(0.7, rgba(baseRgb, 0.1 * intensity * inkFlow));
+      grad.addColorStop(0.35, rgba(traceColor, 0.05 * intensity * inkFlow * (0.7 + humiditeCharge.chargeEncre * 0.5)));
+      grad.addColorStop(0.7, rgba(baseRgb, 0.08 * intensity * inkFlow * (0.6 + humiditeCharge.chargeEncre * 0.6)));
       grad.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -241,8 +299,9 @@ export default function App() {
     };
 
     const addGranulation = (ctx, cx, cy, size, baseRgb, intensity) => {
-      const specks = Math.round(6 + intensity * 12);
-      const pale = mixColor(baseRgb, { r: 245, g: 240, b: 230 }, 0.5);
+      const { textureTrait } = jinkoPreset;
+      const specks = Math.round(6 + intensity * (10 + textureTrait.granulation * 10));
+      const pale = mixColor(baseRgb, { r: 245, g: 240, b: 230 }, 0.5 + textureTrait.lissage * 0.2);
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
       for (let i = 0; i < specks; i += 1) {
@@ -251,7 +310,7 @@ export default function App() {
         const sx = cx + Math.cos(angle) * radius;
         const sy = cy + Math.sin(angle) * radius;
         const dot = (0.3 + Math.random() * 0.7) * (0.7 + intensity);
-        ctx.fillStyle = rgba(pale, 0.06 * intensity * inkFlow);
+        ctx.fillStyle = rgba(pale, 0.04 * intensity * inkFlow * (0.6 + textureTrait.granulation * 0.8));
         ctx.beginPath();
         ctx.arc(sx, sy, dot, 0, Math.PI * 2);
         ctx.fill();
@@ -260,8 +319,13 @@ export default function App() {
     };
 
     const addWaterHalo = (ctx, cx, cy, size, baseRgb, intensity) => {
-      const layers = 3 + Math.round(intensity * 3);
-      const haloRgb = mixColor(baseRgb, paperRgb, 0.55 + waterRatio * 0.35);
+      const { diffusionAbsorption, degradesValeurs } = jinkoPreset;
+      const layers = 3 + Math.round(intensity * (2 + diffusionAbsorption.diffusion * 3));
+      const haloRgb = mixColor(
+        baseRgb,
+        paperRgb,
+        0.55 + waterRatio * (0.25 + diffusionAbsorption.capillarite * 0.4)
+      );
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
       for (let i = 0; i < layers; i += 1) {
@@ -270,8 +334,14 @@ export default function App() {
         const driftY = (Math.random() - 0.5) * size * 0.2;
         const grad = ctx.createRadialGradient(cx + driftX, cy + driftY, radius * 0.2, cx + driftX, cy + driftY, radius);
         grad.addColorStop(0, rgba(haloRgb, 0));
-        grad.addColorStop(0.5, rgba(haloRgb, 0.025 * intensity * (0.6 + waterRatio)));
-        grad.addColorStop(0.85, rgba(haloRgb, 0.05 * intensity * (0.6 + waterRatio)));
+        grad.addColorStop(
+          0.5,
+          rgba(haloRgb, 0.02 * intensity * (0.6 + waterRatio) * (0.7 + degradesValeurs.fondu * 0.7))
+        );
+        grad.addColorStop(
+          0.85,
+          rgba(haloRgb, 0.05 * intensity * (0.5 + waterRatio) * (0.6 + diffusionAbsorption.diffusion * 0.6))
+        );
         grad.addColorStop(1, rgba(haloRgb, 0));
         ctx.fillStyle = grad;
         ctx.beginPath();
@@ -317,12 +387,33 @@ export default function App() {
       const pressure = 1.0 - speed * 0.6;
       const whisper = localEnergy.rms < 0.18;
       const brush = activeBrush;
+      const { diffusionAbsorption, degradesValeurs, humiditeCharge, textureTrait, bordsContours, expressiviteGlobale } = jinkoPreset;
+      const brushHalo = brush.halo ?? 1;
+      const brushTexture = brush.texture ?? 1;
+      const brushEdge = brush.edge ?? 1;
+      const inkPresence = inkFlow * (0.55 + humiditeCharge.chargeEncre * 0.9);
+      const diffusionBoost = 0.7 + diffusionAbsorption.diffusion * 0.7;
+      const capillaryBoost = 0.6 + diffusionAbsorption.capillarite * 0.6;
+      const absorptionBoost = 0.6 + diffusionAbsorption.absorption * 0.6;
+      const contrastScale = 0.55 + degradesValeurs.contraste * 0.8;
+      const haloScale = diffusionBoost * (0.7 + brushHalo * 0.4);
+      const textureScale = (0.7 + brushTexture * 0.5) * (0.6 + textureTrait.granulation * 0.7);
+      const edgeScale = (0.7 + brushEdge * 0.4) * (0.6 + bordsContours.netteteBord * 0.6);
       const baseRgb = hexToRgb(activeInk.value);
-      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.2 + inkFlow * 0.12);
-      const mistRgb = mixColor(baseRgb, paperRgb, 0.65 + waterRatio * 0.2);
-      const wateriness = clamp(0.25 + localBands.low * 0.9 + localEnergy.rms * 0.6 + waterRatio * 0.8, 0, 2);
-      const dryness = clamp(0.95 - wateriness + localBands.high * 0.35 + inkFlow * 0.2, 0.1, 1.2);
-      const fineDetail = clamp(localBands.high * 0.8 + localEnergy.peak * 0.6, 0, 1.2);
+      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.15 + inkPresence * 0.18);
+      const mistRgb = mixColor(baseRgb, paperRgb, 0.6 + (1 - degradesValeurs.valeurGlobale) * 0.25);
+      const wateriness = clamp(
+        0.25 + localBands.low * 0.85 + localEnergy.rms * 0.6 + waterRatio * (0.6 + capillaryBoost * 0.6) + capillaryBoost * 0.2,
+        0,
+        2.2
+      );
+      const dryness = clamp(
+        0.95 - wateriness * (0.6 + absorptionBoost * 0.4) + localBands.high * 0.28 + inkPresence * 0.15 +
+          (1 - humiditeCharge.humiditeTrait) * 0.35,
+        0.1,
+        1.2
+      );
+      const fineDetail = clamp(localBands.high * 0.8 + localEnergy.peak * 0.6 + textureTrait.striation * 0.4, 0, 1.4);
 
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -344,7 +435,8 @@ export default function App() {
       const sizeResponse = clamp(0.25 + brushSizeScale * 0.85, 0.25, 1.15);
       const audioBoost = clamp(0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6, 0.35, 1.6);
       const bandBoost = clamp((localBands.low + localBands.mid + localBands.high) / 1.2, 0, 1);
-      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4);
+      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4) *
+        (0.7 + expressiviteGlobale.spontaneite * 0.6) * (1 - expressiviteGlobale.controle * 0.35);
 
       for (let i = 0; i <= steps; i += 1) {
         const t = i / steps;
@@ -354,37 +446,37 @@ export default function App() {
         cx += (Math.random() - 0.5) * jitterBase;
         cy += (Math.random() - 0.5) * jitterBase;
 
-        if (Math.random() < 0.12 * wateriness && len > 0) {
-          addWetTrace(ctx, cx, cy, 6 + brush.baseSize * 0.6, baseRgb, wateriness, dirX, dirY);
+        if (Math.random() < 0.12 * wateriness * (0.6 + humiditeCharge.humiditeTrait * 0.6) && len > 0) {
+          addWetTrace(ctx, cx, cy, 6 + brush.baseSize * 0.6, baseRgb, wateriness * contrastScale, dirX, dirY);
         }
 
-        if (Math.random() < 0.2 * (0.4 + waterRatio)) {
-          addWaterHalo(ctx, cx, cy, 10 + brush.baseSize * 1.2, baseRgb, 0.4 + wateriness * 0.4);
+        if (Math.random() < 0.2 * (0.4 + waterRatio) * haloScale) {
+          addWaterHalo(ctx, cx, cy, 10 + brush.baseSize * 1.2, baseRgb, (0.4 + wateriness * 0.4) * haloScale);
         }
 
-        if (Math.random() < 0.1 * dryness) {
-          addDryEdge(ctx, cx, cy, 6 + brush.baseSize * 0.8, deepRgb, dryness);
+        if (Math.random() < 0.1 * dryness * edgeScale) {
+          addDryEdge(ctx, cx, cy, 6 + brush.baseSize * 0.8, deepRgb, dryness * edgeScale);
         }
 
-        if (Math.random() < 0.18 * (0.4 + fineDetail)) {
-          addGranulation(ctx, cx, cy, 6 + brush.baseSize, baseRgb, 0.4 + fineDetail);
+        if (Math.random() < 0.18 * (0.4 + fineDetail) * textureScale) {
+          addGranulation(ctx, cx, cy, 6 + brush.baseSize, baseRgb, (0.4 + fineDetail) * textureScale);
         }
 
         if (brush.style === "mist") {
           const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * inkFlow);
+          ctx.fillStyle = rgba(mistRgb, 0.04 * brush.flow * inkPresence * contrastScale);
           ctx.beginPath();
           ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
 
           if (Math.random() < 0.15 + bandBoost * 0.4) {
-            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, 0.4 + bandBoost * 0.5);
+            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, (0.4 + bandBoost * 0.5) * contrastScale);
             if (Math.random() < 0.4) {
-              addDryEdge(ctx, cx, cy, washSize * 0.9, deepRgb, 0.6 + bandBoost);
+              addDryEdge(ctx, cx, cy, washSize * 0.9, deepRgb, (0.6 + bandBoost) * edgeScale);
             }
           }
           if (Math.random() < 0.4) {
-            addWaterHalo(ctx, cx, cy, washSize * 0.9, baseRgb, 0.5 + wateriness * 0.35);
+            addWaterHalo(ctx, cx, cy, washSize * 0.9, baseRgb, (0.5 + wateriness * 0.35) * haloScale);
           }
         }
 
@@ -403,8 +495,8 @@ export default function App() {
           ctx.globalCompositeOperation = "screen";
           const haloGradient = ctx.createRadialGradient(cx, cy, washSize * 0.15, cx, cy, washSize * 0.95);
           const coolTone = mixColor(baseRgb, { r: 140, g: 200, b: 255 }, 0.35);
-          haloGradient.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.05));
-          haloGradient.addColorStop(0.5, rgba(coolTone, 0.06 + localEnergy.rms * 0.12));
+          haloGradient.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.04 * contrastScale));
+          haloGradient.addColorStop(0.5, rgba(coolTone, (0.06 + localEnergy.rms * 0.12) * contrastScale));
           haloGradient.addColorStop(1, rgba(baseRgb, 0));
           ctx.fillStyle = haloGradient;
           ctx.beginPath();
@@ -412,14 +504,14 @@ export default function App() {
           ctx.fill();
           ctx.restore();
           if (Math.random() < 0.25) {
-            addWetTrace(ctx, cx, cy, washSize * 0.65, baseRgb, 0.45 + wateriness * 0.4, dirX, dirY);
+            addWetTrace(ctx, cx, cy, washSize * 0.65, baseRgb, (0.45 + wateriness * 0.4) * contrastScale, dirX, dirY);
           }
         }
 
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
-          const alphaBase = (0.06 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * inkFlow;
+          const alphaBase = (0.05 + localBands.mid * 0.5 + localEnergy.rms * 0.35) * brush.flow * inkPresence * contrastScale;
 
           for (let b = 0; b < bristles; b += 1) {
             if (Math.random() < brush.grain * 0.2) continue;
@@ -436,7 +528,7 @@ export default function App() {
             ctx.stroke();
           }
           if (Math.random() < 0.2 + fineDetail * 0.2) {
-            addGranulation(ctx, cx, cy, rakeWidth * 0.6, baseRgb, 0.35 + fineDetail);
+            addGranulation(ctx, cx, cy, rakeWidth * 0.6, baseRgb, (0.35 + fineDetail) * textureScale);
           }
         }
 
@@ -453,11 +545,11 @@ export default function App() {
               baseSize * (0.7 + Math.random() * 0.6),
               angle,
               deepRgb,
-              (0.12 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * inkFlow
+              (0.1 + localBands.low * 0.5 + localEnergy.rms * 0.2) * brush.flow * inkPresence * contrastScale
             );
           }
           if (Math.random() < 0.2 * dryness) {
-            addDryEdge(ctx, cx, cy, baseSize * 1.2, deepRgb, 0.6 + dryness);
+            addDryEdge(ctx, cx, cy, baseSize * 1.2, deepRgb, (0.6 + dryness) * edgeScale);
           }
         }
 
@@ -468,7 +560,7 @@ export default function App() {
           const filamentLength = 2.5 + localBands.high * 6 + localEnergy.peak * 3;
           const angleSeed = Math.random() * Math.PI * 2;
           ctx.save();
-          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.25) * brush.flow * inkFlow);
+          ctx.strokeStyle = rgba(deepRgb, (0.1 + localEnergy.rms * 0.22) * brush.flow * inkPresence * contrastScale);
           ctx.lineWidth = 0.25 * sizeResponse;
           ctx.beginPath();
           for (let f = 0; f < filamentCount; f += 1) {
@@ -489,23 +581,26 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.35 + Math.random() * 0.5) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.2 + localEnergy.peak * 0.32) * inkFlow);
+            ctx.fillStyle = rgba(baseRgb, (0.18 + localEnergy.peak * 0.3) * inkPresence * contrastScale);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
           }
           if (Math.random() < 0.25) {
-            addWetTrace(ctx, cx, cy, baseRadius * 0.7, baseRgb, 0.35 + wateriness, dirX, dirY);
+            addWetTrace(ctx, cx, cy, baseRadius * 0.7, baseRgb, (0.35 + wateriness) * contrastScale, dirX, dirY);
           }
           ctx.restore();
         }
 
         if (whisper && brush.style !== "mist") {
           const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.03 * brush.flow * inkFlow);
+          ctx.fillStyle = rgba(mistRgb, 0.03 * brush.flow * inkPresence * contrastScale);
           ctx.beginPath();
           ctx.ellipse(cx, cy, hazeSize, hazeSize * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
+          if (Math.random() < 0.4) {
+            addWaterHalo(ctx, cx, cy, hazeSize * 1.2, baseRgb, (0.5 + wateriness * 0.3) * haloScale);
+          }
         }
 
         const splashIntensity = Math.max(localBands.high, localEnergy.peak);
@@ -515,7 +610,7 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.4 + Math.random() * (1 + splashIntensity)) * sizeResponse;
-            const alpha = 0.32 * splashIntensity * (whisper ? 0.5 : 1) * inkFlow;
+            const alpha = 0.3 * splashIntensity * (whisper ? 0.5 : 1) * inkPresence * contrastScale;
             const splashRgb = mixColor(baseRgb, paperRgb, 0.3 + waterRatio * 0.35);
             ctx.fillStyle = rgba(splashRgb, alpha);
             ctx.beginPath();
@@ -526,12 +621,12 @@ export default function App() {
           if (Math.random() < 0.12 * splashIntensity) {
             const len = 8 + 12 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
-            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.18 * splashIntensity * inkFlow, 0.5);
+            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.16 * splashIntensity * inkPresence * contrastScale, 0.5);
           }
 
           if (localEnergy.peak > 0.18 && Math.random() < 0.5) {
             addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
-            addStain(ctx, cx, cy, 14 + localEnergy.peak * 26, baseRgb, localEnergy.peak);
+            addStain(ctx, cx, cy, 14 + localEnergy.peak * 26, baseRgb, localEnergy.peak * contrastScale);
           }
         }
       }
