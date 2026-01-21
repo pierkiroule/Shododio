@@ -46,14 +46,11 @@ export default function App() {
   const galleryActionsRef = useRef({});
   const toolbarRef = useRef(null);
   const toolbarHandleRef = useRef(null);
-  const toolsAreaRef = useRef(null);
-  const toolsAreaHandleRef = useRef(null);
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
-  const [bottomToolsCollapsed, setBottomToolsCollapsed] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(true);
   const [galleryExpanded, setGalleryExpanded] = useState(false);
   useEffect(() => {
@@ -1439,11 +1436,9 @@ export default function App() {
     };
 
     const cleanupToolbarDrag = setupDraggable(toolbarRef.current, toolbarHandleRef.current);
-    const cleanupBottomToolsDrag = setupDraggable(toolsAreaRef.current, toolsAreaHandleRef.current);
 
     return () => {
       cleanupToolbarDrag();
-      cleanupBottomToolsDrag();
       cleanupSize();
       cleanupOpacity();
       cleanupLayering();
@@ -1515,97 +1510,85 @@ export default function App() {
 
         <div
           ref={toolbarRef}
-          className={`floating-toolbar ${toolsCollapsed ? "collapsed" : ""}`}
+          className={`floating-dock ${toolsCollapsed ? "collapsed" : ""}`}
         >
-          <div ref={toolbarHandleRef} className="floating-toolbar-header">
-            <span>Outils</span>
+          <div
+            ref={toolbarHandleRef}
+            className="floating-dock-header"
+            onClick={() => {
+              if (toolsCollapsed) setToolsCollapsed(false);
+            }}
+          >
+            <span>Menu</span>
             <button
               className="chip-btn ghost"
               type="button"
               onClick={() => setToolsCollapsed((prev) => !prev)}
+              aria-label={toolsCollapsed ? "Ouvrir le menu" : "Réduire le menu"}
             >
               {toolsCollapsed ? "Ouvrir" : "Réduire"}
             </button>
           </div>
-          <div className="floating-toolbar-body">
-            <div className="control-block">
+          <div className="floating-dock-body">
+            <div className="floating-dock-section">
               <div className="control-label">Pinceaux</div>
               <div id="brush-options" className="option-row compact"></div>
             </div>
-            <div className="control-block">
+            <div className="floating-dock-section">
               <div className="control-label">Encres</div>
               <div id="color-options" className="option-row compact"></div>
             </div>
-            <div className="control-block slider-block">
+            <div className="floating-dock-section slider-block">
               <div className="control-label">Taille</div>
               <div className="size-row">
                 <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
                 <span id="size-value" className="size-value">100%</span>
               </div>
             </div>
-            <div className="control-block slider-block">
+            <div className="floating-dock-section slider-block">
               <div className="control-label">Opacité</div>
               <div className="size-row">
                 <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
                 <span id="opacity-value" className="size-value">85%</span>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        ref={toolsAreaRef}
-        className={`tools-area floating-tools ${bottomToolsCollapsed ? "collapsed" : ""}`}
-      >
-        <div ref={toolsAreaHandleRef} className="tools-area-handle">
-          <span>Menus</span>
-          <button
-            className="chip-btn ghost"
-            type="button"
-            onClick={() => setBottomToolsCollapsed((prev) => !prev)}
-            aria-label={bottomToolsCollapsed ? "Ouvrir le menu" : "Réduire le menu"}
-          >
-            {bottomToolsCollapsed ? "Ouvrir" : "Réduire"}
-          </button>
-        </div>
-        <div className="tools-area-body">
-          <div className="accordion">
-            <section className={`accordion-item ${advancedOpen ? "open" : ""}`}>
-              <button
-                className="accordion-trigger"
-                type="button"
-                onClick={() => setAdvancedOpen((prev) => !prev)}
-              >
-                Réglages avancés
-                <span className="accordion-indicator">{advancedOpen ? "−" : "+"}</span>
-              </button>
-              <div className="accordion-panel">
-                <div className="minimal-controls">
-                  <div className="control-block slider-block">
-                    <div className="control-label">Cycles</div>
-                    <label className="size-row toggle-row">
-                      <input id="layering-toggle" type="checkbox" defaultChecked />
-                      <span id="layering-value" className="size-value">Superposer</span>
-                    </label>
+            <div className="accordion">
+              <section className={`accordion-item ${advancedOpen ? "open" : ""}`}>
+                <button
+                  className="accordion-trigger"
+                  type="button"
+                  onClick={() => setAdvancedOpen((prev) => !prev)}
+                >
+                  Réglages avancés
+                  <span className="accordion-indicator">{advancedOpen ? "−" : "+"}</span>
+                </button>
+                <div className="accordion-panel">
+                  <div className="minimal-controls">
+                    <div className="control-block slider-block">
+                      <div className="control-label">Cycles</div>
+                      <label className="size-row toggle-row">
+                        <input id="layering-toggle" type="checkbox" defaultChecked />
+                        <span id="layering-value" className="size-value">Superposer</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
+            <button
+              className="chip-btn gallery-launch"
+              type="button"
+              onClick={() => {
+                setGalleryOpen((prev) => {
+                  const next = !prev;
+                  if (next) setGalleryExpanded(false);
+                  return next;
+                });
+              }}
+            >
+              Galerie éphémère
+            </button>
           </div>
-          <button
-            className="chip-btn gallery-launch"
-            type="button"
-            onClick={() => {
-              setGalleryOpen((prev) => {
-                const next = !prev;
-                if (next) setGalleryExpanded(false);
-                return next;
-              });
-            }}
-          >
-            Galerie éphémère
-          </button>
         </div>
       </div>
 
