@@ -82,6 +82,49 @@ canvas {
   transition: opacity 0.4s ease;
 }
 
+.shodo-indicator {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(13, 13, 13, 0.95),
+    rgba(13, 13, 13, 0.4) 35%,
+    rgba(13, 13, 13, 0.9) 70%,
+    rgba(13, 13, 13, 0.6)
+  );
+  box-shadow: 0 0 6px rgba(13, 13, 13, 0.25);
+  opacity: 0.7;
+  animation: ink-spin 6s linear infinite;
+}
+
+.shodo-indicator::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.2), rgba(13, 13, 13, 0.95));
+  filter: blur(0.2px);
+}
+
+.shodo-indicator::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 13, 13, 0.25);
+  mix-blend-mode: multiply;
+}
+
+@keyframes ink-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .top-ui {
   display: flex;
   flex-direction: column;
