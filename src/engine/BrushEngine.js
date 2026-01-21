@@ -119,6 +119,12 @@ const addWetTrace = (ctx, cx, cy, size, rgb, intensity, dirX, dirY, rand) => {
   ctx.restore();
 };
 
+const getInkDepth = (ink, flow) => {
+  const luminance = (0.2126 * ink.r + 0.7152 * ink.g + 0.0722 * ink.b) / 255;
+  const depth = clamp(0.08 + (1 - luminance) * 0.35 + flow * 0.08, 0.08, 0.5);
+  return mixColor(ink, { r: 0, g: 0, b: 0 }, depth);
+};
+
 export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) => {
   if (!ctx || !a || !b) return;
   const rand = seed === undefined ? Math.random : mulberry32(seed);
@@ -141,10 +147,10 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
   const dryness = clamp(1.1 - wateriness + drive.high * 0.5, 0.1, 1.3);
   const size = brush.baseSize * (0.6 + drive.energy * 1.2) * (0.6 + drive.mid * 0.6);
   const jitterBase = brush.jitter * (1 + drive.high * 4 + drive.energy * 3) * size;
-  const inkDeep = mixColor(ink, { r: 0, g: 0, b: 0 }, 0.2 + brush.flow * 0.1);
+  const inkDeep = getInkDepth(ink, brush.flow);
 
   ctx.save();
-  ctx.globalCompositeOperation = "multiply";
+  ctx.globalCompositeOperation = "source-over";
 
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
