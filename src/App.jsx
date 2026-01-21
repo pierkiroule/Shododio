@@ -125,11 +125,17 @@ export default function App() {
     const specViz = document.getElementById("spectrum-viz");
     const layeringToggle = document.getElementById("layering-toggle");
     const layeringValue = document.getElementById("layering-value");
-    const tapState = {
+    const touchState = {
       x: 0,
       y: 0,
-      strength: 0
+      strength: 0,
+      active: false,
+      lastX: 0,
+      lastY: 0,
+      swipeAngle: 0,
+      swipePower: 0
     };
+    let activePointerId = null;
     const cyclesRef = { current: [] };
 
     const clearAll = () => {
@@ -611,7 +617,10 @@ export default function App() {
       voiceState.angle = Math.random() * Math.PI * 2;
       voiceState.velocity = 0;
       lastFrameTime = performance.now();
-      tapState.strength = 0;
+      touchState.strength = 0;
+      touchState.active = false;
+      touchState.swipePower = 0;
+      activePointerId = null;
     };
 
     const cleanupCycleAssets = (cycle) => {
@@ -769,7 +778,7 @@ export default function App() {
           id: `${Date.now()}_${cycleIndex}`,
           duration: durationSeconds,
           seed: Math.random(),
-          guide: { x: tapState.x, y: tapState.y },
+          guide: { x: touchState.x, y: touchState.y },
           audioData: {
             bands: { ...bands },
             energy: { ...audioEnergy }
@@ -1205,15 +1214,27 @@ export default function App() {
       const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
       voiceState.angle += turnAmount;
 
-      if (tapState.strength > 0) {
-        const dxTap = tapState.x - voiceState.x;
-        const dyTap = tapState.y - voiceState.y;
-        const tapAngle = Math.atan2(dyTap, dxTap);
-        const angleDiff = Math.atan2(Math.sin(tapAngle - voiceState.angle), Math.cos(tapAngle - voiceState.angle));
-        const distance = Math.hypot(dxTap, dyTap);
-        const pull = clamp(tapState.strength * (1 - clamp(distance / (paper.width * 0.7), 0, 1)), 0, 1);
-        voiceState.angle += angleDiff * (0.08 + pull * 0.18);
-        tapState.strength = Math.max(0, tapState.strength - delta * 0.0015);
+      if (touchState.strength > 0) {
+        const dxTouch = touchState.x - voiceState.x;
+        const dyTouch = touchState.y - voiceState.y;
+        const touchAngle = Math.atan2(dyTouch, dxTouch);
+        const angleDiff = Math.atan2(Math.sin(touchAngle - voiceState.angle), Math.cos(touchAngle - voiceState.angle));
+        const distance = Math.hypot(dxTouch, dyTouch);
+        const pull = clamp(touchState.strength * (1 - clamp(distance / (paper.width * 0.7), 0, 1)), 0, 1);
+        voiceState.angle += angleDiff * (0.06 + pull * 0.2);
+
+        if (touchState.swipePower > 0) {
+          const swipeDiff = Math.atan2(
+            Math.sin(touchState.swipeAngle - voiceState.angle),
+            Math.cos(touchState.swipeAngle - voiceState.angle)
+          );
+          voiceState.angle += swipeDiff * (0.05 + touchState.swipePower * 0.18) * touchState.strength;
+        }
+
+        if (!touchState.active) {
+          touchState.strength = Math.max(0, touchState.strength - delta * 0.0014);
+        }
+        touchState.swipePower = Math.max(0, touchState.swipePower - delta * 0.002);
       }
 
       const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
@@ -1339,7 +1360,7 @@ export default function App() {
       }
     };
 
-    const onCanvasTap = (event) => {
+    const updateTouchPoint = (event) => {
       if (!canvasWrap) return;
       if (event.target.closest(".action-area")) return;
       const rect = canvasWrap.getBoundingClientRect();
@@ -1347,9 +1368,42 @@ export default function App() {
       const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
       const x = clamp(event.clientX - rect.left, 0, rect.width);
       const y = clamp(event.clientY - rect.top, 0, rect.height);
-      tapState.x = x * scaleX;
-      tapState.y = y * scaleY;
-      tapState.strength = 1;
+      touchState.x = x * scaleX;
+      touchState.y = y * scaleY;
+    };
+
+    const onCanvasTap = (event) => {
+      if (event.button !== 0 && event.pointerType === "mouse") return;
+      updateTouchPoint(event);
+      touchState.lastX = touchState.x;
+      touchState.lastY = touchState.y;
+      touchState.strength = 1;
+      touchState.active = true;
+      touchState.swipePower = 0;
+      activePointerId = event.pointerId;
+      canvasWrap.setPointerCapture?.(event.pointerId);
+    };
+
+    const onCanvasMove = (event) => {
+      if (activePointerId === null || event.pointerId !== activePointerId) return;
+      updateTouchPoint(event);
+      const dx = touchState.x - touchState.lastX;
+      const dy = touchState.y - touchState.lastY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.5) {
+        touchState.swipeAngle = Math.atan2(dy, dx);
+        touchState.swipePower = clamp(touchState.swipePower + dist * 0.02, 0, 1);
+        touchState.lastX = touchState.x;
+        touchState.lastY = touchState.y;
+      }
+      touchState.strength = 1;
+    };
+
+    const onCanvasRelease = (event) => {
+      if (activePointerId === null || event.pointerId !== activePointerId) return;
+      touchState.active = false;
+      activePointerId = null;
+      canvasWrap.releasePointerCapture?.(event.pointerId);
     };
 
     initBtn.addEventListener("click", onInitClick);
@@ -1357,6 +1411,9 @@ export default function App() {
     mainBtn.addEventListener("click", onMainClick);
     stopBtn.addEventListener("click", onStop);
     canvasWrap.addEventListener("pointerdown", onCanvasTap);
+    canvasWrap.addEventListener("pointermove", onCanvasMove);
+    canvasWrap.addEventListener("pointerup", onCanvasRelease);
+    canvasWrap.addEventListener("pointercancel", onCanvasRelease);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
     const cleanupLayering = setupLayeringControl();
@@ -1390,6 +1447,9 @@ export default function App() {
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
       canvasWrap.removeEventListener("pointerdown", onCanvasTap);
+      canvasWrap.removeEventListener("pointermove", onCanvasMove);
+      canvasWrap.removeEventListener("pointerup", onCanvasRelease);
+      canvasWrap.removeEventListener("pointercancel", onCanvasRelease);
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
       cyclesRef.current.forEach((cycle) => cleanupCycleAssets(cycle));
