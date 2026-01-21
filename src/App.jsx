@@ -56,6 +56,9 @@ export default function App() {
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(true);
+  useEffect(() => {
+    if (!galleryOpen) setGalleryExportOpen(false);
+  }, [galleryOpen]);
 
   const updateCycles = useCallback((updater) => {
     setCycles((prev) => {
@@ -1644,7 +1647,7 @@ export default function App() {
         <button
           className="chip-btn gallery-launch"
           type="button"
-          onClick={() => setGalleryOpen(true)}
+          onClick={() => setGalleryOpen((prev) => !prev)}
         >
           Galerie éphémère
         </button>

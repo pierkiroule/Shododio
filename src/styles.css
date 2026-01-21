@@ -569,7 +569,7 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 120;
+  z-index: 260;
 }
 
 .floating-toolbar-header {
@@ -611,7 +611,7 @@ canvas {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   display: none;
   flex-direction: column;
-  z-index: 200;
+  z-index: 240;
   pointer-events: auto;
 }
 
