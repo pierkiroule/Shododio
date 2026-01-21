@@ -582,6 +582,7 @@ canvas {
   font-size: 0.55rem;
   color: rgba(13, 13, 13, 0.7);
   cursor: grab;
+  touch-action: none;
 }
 
 .floating-toolbar-header:active {

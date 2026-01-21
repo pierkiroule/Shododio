@@ -140,6 +140,7 @@ export default function App() {
 
       const onPointerDown = (event) => {
         if (event.button !== 0) return;
+        if (event.cancelable) event.preventDefault();
         isDragging = true;
         const rect = target.getBoundingClientRect();
         startX = event.clientX;
