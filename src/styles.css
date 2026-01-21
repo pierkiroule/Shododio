@@ -16,7 +16,8 @@
 
 body {
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg);
   font-family: "Inter", sans-serif;
   user-select: none;
@@ -27,18 +28,19 @@ body {
 
 #root {
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 100vh;
   width: 100%;
 }
 
 .canvas-area {
-  flex: 1;
+  flex: 0 0 auto;
+  min-height: 70vh;
   position: relative;
   overflow: hidden;
   background: var(--bg);
@@ -232,79 +234,15 @@ canvas {
   justify-content: center;
 }
 
-.floating-dock {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: min(360px, 92vw);
+.tools-area {
   background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 18px;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: hidden;
-  z-index: 260;
-  pointer-events: auto;
-}
-
-.floating-dock-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 0.55rem;
-  color: rgba(13, 13, 13, 0.7);
-  cursor: grab;
-  touch-action: none;
-}
-
-.floating-dock-header:active {
-  cursor: grabbing;
-}
-
-.floating-dock-body {
+  padding: 16px 14px calc(18px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 0 12px 12px;
-}
-
-.floating-dock.collapsed {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-}
-
-.floating-dock.collapsed .floating-dock-header {
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  justify-content: center;
-}
-
-.floating-dock.collapsed .floating-dock-header > span,
-.floating-dock.collapsed .floating-dock-header button {
-  display: none;
-}
-
-.floating-dock.collapsed::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(13, 13, 13, 0.45);
-}
-
-.floating-dock.collapsed .floating-dock-body {
-  display: none;
+  align-items: center;
 }
 
 .minimal-controls {
@@ -312,13 +250,6 @@ canvas {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   align-items: start;
-}
-
-.floating-dock-section {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
 }
 
 .control-block {
@@ -706,15 +637,11 @@ canvas {
 }
 
 @media (max-width: 720px) {
-  .floating-dock {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    width: auto;
-    border-radius: 20px;
+  .canvas-area {
+    min-height: 60vh;
   }
 
-  .floating-dock-body {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  .tools-area {
+    padding: 14px 12px calc(16px + env(safe-area-inset-bottom));
   }
 }

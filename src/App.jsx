@@ -44,14 +44,18 @@ export default function App() {
   const canvasWrapRef = useRef(null);
   const videoRefs = useRef({});
   const galleryActionsRef = useRef({});
-  const toolbarRef = useRef(null);
-  const toolbarHandleRef = useRef(null);
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
-  const [toolsCollapsed, setToolsCollapsed] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(true);
+  const [menuSections, setMenuSections] = useState({
+    brushes: true,
+    inks: false,
+    size: false,
+    opacity: false,
+    advanced: false,
+    gallery: false
+  });
   const [galleryExpanded, setGalleryExpanded] = useState(false);
   useEffect(() => {
     if (!galleryOpen) {
@@ -127,64 +131,6 @@ export default function App() {
       strength: 0
     };
     const cyclesRef = { current: [] };
-
-    const setupDraggable = (target, handle) => {
-      if (!target || !handle) return () => {};
-      let isDragging = false;
-      let startX = 0;
-      let startY = 0;
-      let startLeft = 0;
-      let startTop = 0;
-      let startWidth = 0;
-      let startHeight = 0;
-
-      const onPointerDown = (event) => {
-        if (event.button !== 0) return;
-        if (event.cancelable) event.preventDefault();
-        isDragging = true;
-        const rect = target.getBoundingClientRect();
-        startX = event.clientX;
-        startY = event.clientY;
-        startLeft = rect.left;
-        startTop = rect.top;
-        startWidth = rect.width;
-        startHeight = rect.height;
-        target.style.left = `${rect.left}px`;
-        target.style.top = `${rect.top}px`;
-        target.style.right = "auto";
-        target.style.bottom = "auto";
-        target.style.transform = "none";
-        handle.setPointerCapture(event.pointerId);
-      };
-
-      const onPointerMove = (event) => {
-        if (!isDragging) return;
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
-        const maxLeft = window.innerWidth - startWidth - 8;
-        const maxTop = window.innerHeight - startHeight - 8;
-        const nextLeft = clamp(startLeft + dx, 8, Math.max(8, maxLeft));
-        const nextTop = clamp(startTop + dy, 8, Math.max(8, maxTop));
-        target.style.left = `${nextLeft}px`;
-        target.style.top = `${nextTop}px`;
-      };
-
-      const onPointerUp = (event) => {
-        if (!isDragging) return;
-        isDragging = false;
-        handle.releasePointerCapture(event.pointerId);
-      };
-
-      handle.addEventListener("pointerdown", onPointerDown);
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-
-      return () => {
-        handle.removeEventListener("pointerdown", onPointerDown);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-      };
-    };
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -1435,10 +1381,7 @@ export default function App() {
       exportZipBundle
     };
 
-    const cleanupToolbarDrag = setupDraggable(toolbarRef.current, toolbarHandleRef.current);
-
     return () => {
-      cleanupToolbarDrag();
       cleanupSize();
       cleanupOpacity();
       cleanupLayering();
@@ -1456,6 +1399,13 @@ export default function App() {
   const selectedCycles = cycles.filter((cycle) => cycle.selected);
   const handlePlayPreview = (cycleId) => {
     setPlayingId((prev) => (prev === cycleId ? null : cycleId));
+  };
+
+  const toggleMenuSection = (section) => {
+    setMenuSections((prev) => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
   };
 
   useEffect(() => {
@@ -1508,87 +1458,119 @@ export default function App() {
           </div>
         </div>
 
-        <div
-          ref={toolbarRef}
-          className={`floating-dock ${toolsCollapsed ? "collapsed" : ""}`}
-        >
-          <div
-            ref={toolbarHandleRef}
-            className="floating-dock-header"
-            onClick={() => {
-              if (toolsCollapsed) setToolsCollapsed(false);
-            }}
-          >
-            <span>Menu</span>
+      </div>
+
+      <div className="tools-area">
+        <div className="accordion">
+          <section className={`accordion-item ${menuSections.brushes ? "open" : ""}`}>
             <button
-              className="chip-btn ghost"
+              className="accordion-trigger"
               type="button"
-              onClick={() => setToolsCollapsed((prev) => !prev)}
-              aria-label={toolsCollapsed ? "Ouvrir le menu" : "Réduire le menu"}
+              onClick={() => toggleMenuSection("brushes")}
             >
-              {toolsCollapsed ? "Ouvrir" : "Réduire"}
+              Pinceaux
+              <span className="accordion-indicator">{menuSections.brushes ? "−" : "+"}</span>
             </button>
-          </div>
-          <div className="floating-dock-body">
-            <div className="floating-dock-section">
-              <div className="control-label">Pinceaux</div>
+            <div className="accordion-panel">
               <div id="brush-options" className="option-row compact"></div>
             </div>
-            <div className="floating-dock-section">
-              <div className="control-label">Encres</div>
+          </section>
+
+          <section className={`accordion-item ${menuSections.inks ? "open" : ""}`}>
+            <button
+              className="accordion-trigger"
+              type="button"
+              onClick={() => toggleMenuSection("inks")}
+            >
+              Encres
+              <span className="accordion-indicator">{menuSections.inks ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
               <div id="color-options" className="option-row compact"></div>
             </div>
-            <div className="floating-dock-section slider-block">
-              <div className="control-label">Taille</div>
+          </section>
+
+          <section className={`accordion-item ${menuSections.size ? "open" : ""}`}>
+            <button
+              className="accordion-trigger"
+              type="button"
+              onClick={() => toggleMenuSection("size")}
+            >
+              Taille
+              <span className="accordion-indicator">{menuSections.size ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
               <div className="size-row">
                 <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
                 <span id="size-value" className="size-value">100%</span>
               </div>
             </div>
-            <div className="floating-dock-section slider-block">
-              <div className="control-label">Opacité</div>
+          </section>
+
+          <section className={`accordion-item ${menuSections.opacity ? "open" : ""}`}>
+            <button
+              className="accordion-trigger"
+              type="button"
+              onClick={() => toggleMenuSection("opacity")}
+            >
+              Opacité
+              <span className="accordion-indicator">{menuSections.opacity ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
               <div className="size-row">
                 <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
                 <span id="opacity-value" className="size-value">85%</span>
               </div>
             </div>
-            <div className="accordion">
-              <section className={`accordion-item ${advancedOpen ? "open" : ""}`}>
-                <button
-                  className="accordion-trigger"
-                  type="button"
-                  onClick={() => setAdvancedOpen((prev) => !prev)}
-                >
-                  Réglages avancés
-                  <span className="accordion-indicator">{advancedOpen ? "−" : "+"}</span>
-                </button>
-                <div className="accordion-panel">
-                  <div className="minimal-controls">
-                    <div className="control-block slider-block">
-                      <div className="control-label">Cycles</div>
-                      <label className="size-row toggle-row">
-                        <input id="layering-toggle" type="checkbox" defaultChecked />
-                        <span id="layering-value" className="size-value">Superposer</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
+          </section>
+
+          <section className={`accordion-item ${menuSections.advanced ? "open" : ""}`}>
             <button
-              className="chip-btn gallery-launch"
+              className="accordion-trigger"
               type="button"
-              onClick={() => {
-                setGalleryOpen((prev) => {
-                  const next = !prev;
-                  if (next) setGalleryExpanded(false);
-                  return next;
-                });
-              }}
+              onClick={() => toggleMenuSection("advanced")}
             >
-              Galerie éphémère
+              Réglages avancés
+              <span className="accordion-indicator">{menuSections.advanced ? "−" : "+"}</span>
             </button>
-          </div>
+            <div className="accordion-panel">
+              <div className="minimal-controls">
+                <div className="control-block slider-block">
+                  <div className="control-label">Cycles</div>
+                  <label className="size-row toggle-row">
+                    <input id="layering-toggle" type="checkbox" defaultChecked />
+                    <span id="layering-value" className="size-value">Superposer</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className={`accordion-item ${menuSections.gallery ? "open" : ""}`}>
+            <button
+              className="accordion-trigger"
+              type="button"
+              onClick={() => toggleMenuSection("gallery")}
+            >
+              Galerie
+              <span className="accordion-indicator">{menuSections.gallery ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
+              <button
+                className="chip-btn gallery-launch"
+                type="button"
+                onClick={() => {
+                  setGalleryOpen((prev) => {
+                    const next = !prev;
+                    if (next) setGalleryExpanded(false);
+                    return next;
+                  });
+                }}
+              >
+                Galerie éphémère
+              </button>
+            </div>
+          </section>
         </div>
       </div>
 
