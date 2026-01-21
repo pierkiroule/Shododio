@@ -48,16 +48,19 @@ export default function App() {
   const galleryActionsRef = useRef({});
   const toolbarRef = useRef(null);
   const toolbarHandleRef = useRef(null);
-  const galleryModalRef = useRef(null);
-  const galleryHandleRef = useRef(null);
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(true);
+  const [galleryExpanded, setGalleryExpanded] = useState(false);
+  const [toolDetailsOpen, setToolDetailsOpen] = useState(false);
   useEffect(() => {
-    if (!galleryOpen) setGalleryExportOpen(false);
+    if (!galleryOpen) {
+      setGalleryExportOpen(false);
+      setGalleryExpanded(false);
+    }
   }, [galleryOpen]);
 
   const updateCycles = useCallback((updater) => {
@@ -1497,11 +1500,9 @@ export default function App() {
     };
 
     const cleanupToolbarDrag = setupDraggable(toolbarRef.current, toolbarHandleRef.current);
-    const cleanupGalleryDrag = setupDraggable(galleryModalRef.current, galleryHandleRef.current);
 
     return () => {
       cleanupToolbarDrag();
-      cleanupGalleryDrag();
       cleanupSize();
       cleanupOpacity();
       cleanupBlur();
@@ -1595,18 +1596,28 @@ export default function App() {
               <div className="control-label">Encres</div>
               <div id="color-options" className="option-row compact"></div>
             </div>
-            <div className="control-block slider-block">
-              <div className="control-label">Taille</div>
-              <div className="size-row">
-                <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
-                <span id="size-value" className="size-value">100%</span>
+            <div className="toolbar-divider"></div>
+            <button
+              className="chip-btn ghost toolbar-toggle"
+              type="button"
+              onClick={() => setToolDetailsOpen((prev) => !prev)}
+            >
+              {toolDetailsOpen ? "Masquer réglages" : "Afficher réglages"}
+            </button>
+            <div className={`toolbar-details ${toolDetailsOpen ? "open" : ""}`}>
+              <div className="control-block slider-block">
+                <div className="control-label">Taille</div>
+                <div className="size-row">
+                  <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
+                  <span id="size-value" className="size-value">100%</span>
+                </div>
               </div>
-            </div>
-            <div className="control-block slider-block">
-              <div className="control-label">Opacité</div>
-              <div className="size-row">
-                <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
-                <span id="opacity-value" className="size-value">85%</span>
+              <div className="control-block slider-block">
+                <div className="control-label">Opacité</div>
+                <div className="size-row">
+                  <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
+                  <span id="opacity-value" className="size-value">85%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1647,21 +1658,42 @@ export default function App() {
         <button
           className="chip-btn gallery-launch"
           type="button"
-          onClick={() => setGalleryOpen((prev) => !prev)}
+          onClick={() => {
+            setGalleryOpen((prev) => {
+              const next = !prev;
+              if (next) setGalleryExpanded(false);
+              return next;
+            });
+          }}
         >
           Galerie éphémère
         </button>
       </div>
 
+      {galleryOpen ? (
+        <button
+          className="gallery-backdrop"
+          type="button"
+          aria-label="Fermer la galerie"
+          onClick={() => setGalleryOpen(false)}
+        />
+      ) : null}
       <div
-        ref={galleryModalRef}
-        className={`gallery-modal ${galleryOpen ? "open" : ""}`}
+        className={`gallery-drawer ${galleryOpen ? "open" : ""} ${galleryExpanded ? "expanded" : ""}`}
         role="dialog"
         aria-modal="true"
       >
-        <div ref={galleryHandleRef} className="gallery-modal-header">
-          <div className="gallery-modal-title">Galerie éphémère</div>
-          <div className="gallery-modal-actions">
+        <div className="gallery-drawer-header">
+          <button
+            className="gallery-drawer-handle"
+            type="button"
+            onClick={() => setGalleryExpanded((prev) => !prev)}
+            aria-label={galleryExpanded ? "Réduire la galerie" : "Agrandir la galerie"}
+          >
+            <span className="handle-pill"></span>
+          </button>
+          <div className="gallery-drawer-title">Galerie éphémère</div>
+          <div className="gallery-drawer-actions">
             <button
               className="chip-btn ghost"
               type="button"
@@ -1669,19 +1701,12 @@ export default function App() {
             >
               {galleryExportOpen ? "Masquer exports" : "Afficher exports"}
             </button>
-            <button
-              className="chip-btn ghost"
-              type="button"
-              onClick={() => {
-                setGalleryOpen(false);
-                setGalleryExportOpen(false);
-              }}
-            >
+            <button className="chip-btn ghost" type="button" onClick={() => setGalleryOpen(false)}>
               Fermer
             </button>
           </div>
         </div>
-        <div className="gallery-modal-body">
+        <div className="gallery-drawer-body">
           <p className="gallery-hint">
             Préviews AV générées après chaque cycle. Sélectionnez pour exporter (max 5 cycles).
           </p>
