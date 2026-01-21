@@ -55,7 +55,6 @@ export default function App() {
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(true);
   const [galleryExpanded, setGalleryExpanded] = useState(false);
-  const [toolDetailsOpen, setToolDetailsOpen] = useState(false);
   useEffect(() => {
     if (!galleryOpen) {
       setGalleryExportOpen(false);
@@ -1596,28 +1595,18 @@ export default function App() {
               <div className="control-label">Encres</div>
               <div id="color-options" className="option-row compact"></div>
             </div>
-            <div className="toolbar-divider"></div>
-            <button
-              className="chip-btn ghost toolbar-toggle"
-              type="button"
-              onClick={() => setToolDetailsOpen((prev) => !prev)}
-            >
-              {toolDetailsOpen ? "Masquer réglages" : "Afficher réglages"}
-            </button>
-            <div className={`toolbar-details ${toolDetailsOpen ? "open" : ""}`}>
-              <div className="control-block slider-block">
-                <div className="control-label">Taille</div>
-                <div className="size-row">
-                  <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
-                  <span id="size-value" className="size-value">100%</span>
-                </div>
+            <div className="control-block slider-block">
+              <div className="control-label">Taille</div>
+              <div className="size-row">
+                <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
+                <span id="size-value" className="size-value">100%</span>
               </div>
-              <div className="control-block slider-block">
-                <div className="control-label">Opacité</div>
-                <div className="size-row">
-                  <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
-                  <span id="opacity-value" className="size-value">85%</span>
-                </div>
+            </div>
+            <div className="control-block slider-block">
+              <div className="control-label">Opacité</div>
+              <div className="size-row">
+                <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
+                <span id="opacity-value" className="size-value">85%</span>
               </div>
             </div>
           </div>

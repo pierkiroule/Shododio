@@ -598,25 +598,6 @@ canvas {
   display: none;
 }
 
-.toolbar-divider {
-  height: 1px;
-  width: 100%;
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.toolbar-toggle {
-  width: 100%;
-  justify-content: center;
-}
-
-.toolbar-details {
-  display: none;
-  gap: 12px;
-}
-
-.toolbar-details.open {
-  display: grid;
-}
 
 .gallery-backdrop {
   position: fixed;
