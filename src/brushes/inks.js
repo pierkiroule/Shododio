@@ -6,5 +6,8 @@ export const inkPalette = [
   { id: "midori", name: "Midori Vert", value: "#3c7a4d" },
   { id: "koke", name: "Koke Mousse", value: "#6a7d3c" },
   { id: "momo", name: "Momo Rose", value: "#d8a3b6" },
-  { id: "kohaku", name: "Kohaku Ambre", value: "#c47d33" }
+  { id: "kohaku", name: "Kohaku Ambre", value: "#c47d33" },
+  { id: "sakura", name: "Sakura Rose Clair", value: "#f3c1d9" },
+  { id: "sora", name: "Sora Bleu Clair", value: "#bcd7f5" },
+  { id: "kiku", name: "Kiku Jaune Clair", value: "#f8e6a1" }
 ];
