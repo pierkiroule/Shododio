@@ -38,6 +38,7 @@ const mixColor = (rgb, target, amount) => ({
 });
 
 const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1)})`;
+const paperRgb = { r: 244, g: 241, b: 234 };
 
 export default function App() {
   const canvasRef = useRef(null);
@@ -93,7 +94,8 @@ export default function App() {
     const MAX_CYCLES = 5;
     const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
-    let opacityScale = 0.85;
+    let inkFlow = 0.72;
+    let waterRatio = 0.28;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -174,8 +176,9 @@ export default function App() {
         const sx = cx + Math.cos(angle) * radius;
         const sy = cy + Math.sin(angle) * radius;
         const size = (0.8 + Math.random() * 2.6 * intensity) * brushSizeScale;
-        const alpha = 0.6 * intensity * opacityScale;
-        ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.15), alpha);
+        const alpha = 0.32 * intensity * inkFlow;
+        const splatterRgb = mixColor(baseRgb, paperRgb, 0.3 + waterRatio * 0.35);
+        ctx.fillStyle = rgba(splatterRgb, alpha);
         ctx.beginPath();
         ctx.arc(sx, sy, size, 0, Math.PI * 2);
         ctx.fill();
@@ -184,9 +187,10 @@ export default function App() {
 
     const addStain = (ctx, cx, cy, size, baseRgb, intensity) => {
       const radius = Math.max(6, size);
+      const washRgb = mixColor(baseRgb, paperRgb, 0.35 + waterRatio * 0.45);
       const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius);
-      grad.addColorStop(0, rgba(baseRgb, 0.2 * intensity * opacityScale));
-      grad.addColorStop(0.6, rgba(baseRgb, 0.08 * intensity * opacityScale));
+      grad.addColorStop(0, rgba(washRgb, 0.16 * intensity * inkFlow));
+      grad.addColorStop(0.6, rgba(washRgb, 0.05 * intensity * inkFlow));
       grad.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -201,8 +205,8 @@ export default function App() {
       const radius = Math.max(8, size * 1.1);
       const edge = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
       edge.addColorStop(0.0, rgba(baseRgb, 0));
-      edge.addColorStop(0.55, rgba(baseRgb, 0.02 * intensity * opacityScale));
-      edge.addColorStop(0.9, rgba(baseRgb, 0.12 * intensity * opacityScale));
+      edge.addColorStop(0.55, rgba(baseRgb, 0.02 * intensity * inkFlow));
+      edge.addColorStop(0.9, rgba(baseRgb, 0.08 * intensity * inkFlow));
       edge.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -216,7 +220,7 @@ export default function App() {
     const addWetTrace = (ctx, cx, cy, size, baseRgb, intensity, dirX, dirY) => {
       const length = size * (1.2 + intensity * 1.6);
       const width = size * (0.4 + intensity * 0.6);
-      const traceColor = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2);
+      const traceColor = mixColor(baseRgb, paperRgb, 0.4 + waterRatio * 0.35);
       const grad = ctx.createLinearGradient(
         cx - dirX * length * 0.5,
         cy - dirY * length * 0.5,
@@ -224,8 +228,8 @@ export default function App() {
         cy + dirY * length * 0.6
       );
       grad.addColorStop(0, rgba(traceColor, 0));
-      grad.addColorStop(0.35, rgba(traceColor, 0.08 * intensity * opacityScale));
-      grad.addColorStop(0.7, rgba(baseRgb, 0.16 * intensity * opacityScale));
+      grad.addColorStop(0.35, rgba(traceColor, 0.05 * intensity * inkFlow));
+      grad.addColorStop(0.7, rgba(baseRgb, 0.1 * intensity * inkFlow));
       grad.addColorStop(1, rgba(baseRgb, 0));
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -247,9 +251,31 @@ export default function App() {
         const sx = cx + Math.cos(angle) * radius;
         const sy = cy + Math.sin(angle) * radius;
         const dot = (0.3 + Math.random() * 0.7) * (0.7 + intensity);
-        ctx.fillStyle = rgba(pale, 0.08 * intensity * opacityScale);
+        ctx.fillStyle = rgba(pale, 0.06 * intensity * inkFlow);
         ctx.beginPath();
         ctx.arc(sx, sy, dot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    const addWaterHalo = (ctx, cx, cy, size, baseRgb, intensity) => {
+      const layers = 3 + Math.round(intensity * 3);
+      const haloRgb = mixColor(baseRgb, paperRgb, 0.55 + waterRatio * 0.35);
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      for (let i = 0; i < layers; i += 1) {
+        const radius = size * (0.9 + i * 0.35 + Math.random() * 0.25);
+        const driftX = (Math.random() - 0.5) * size * 0.2;
+        const driftY = (Math.random() - 0.5) * size * 0.2;
+        const grad = ctx.createRadialGradient(cx + driftX, cy + driftY, radius * 0.2, cx + driftX, cy + driftY, radius);
+        grad.addColorStop(0, rgba(haloRgb, 0));
+        grad.addColorStop(0.5, rgba(haloRgb, 0.025 * intensity * (0.6 + waterRatio)));
+        grad.addColorStop(0.85, rgba(haloRgb, 0.05 * intensity * (0.6 + waterRatio)));
+        grad.addColorStop(1, rgba(haloRgb, 0));
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(cx + driftX, cy + driftY, radius * 1.1, radius * 0.85, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -292,10 +318,10 @@ export default function App() {
       const whisper = localEnergy.rms < 0.18;
       const brush = activeBrush;
       const baseRgb = hexToRgb(activeInk.value);
-      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.35);
-      const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
-      const wateriness = clamp(0.2 + localBands.low * 0.9 + localEnergy.rms * 0.6, 0, 1.6);
-      const dryness = clamp(1.1 - wateriness + localBands.high * 0.35, 0.15, 1.4);
+      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.2 + inkFlow * 0.12);
+      const mistRgb = mixColor(baseRgb, paperRgb, 0.65 + waterRatio * 0.2);
+      const wateriness = clamp(0.25 + localBands.low * 0.9 + localEnergy.rms * 0.6 + waterRatio * 0.8, 0, 2);
+      const dryness = clamp(0.95 - wateriness + localBands.high * 0.35 + inkFlow * 0.2, 0.1, 1.2);
       const fineDetail = clamp(localBands.high * 0.8 + localEnergy.peak * 0.6, 0, 1.2);
 
       ctx.save();
@@ -332,6 +358,10 @@ export default function App() {
           addWetTrace(ctx, cx, cy, 6 + brush.baseSize * 0.6, baseRgb, wateriness, dirX, dirY);
         }
 
+        if (Math.random() < 0.2 * (0.4 + waterRatio)) {
+          addWaterHalo(ctx, cx, cy, 10 + brush.baseSize * 1.2, baseRgb, 0.4 + wateriness * 0.4);
+        }
+
         if (Math.random() < 0.1 * dryness) {
           addDryEdge(ctx, cx, cy, 6 + brush.baseSize * 0.8, deepRgb, dryness);
         }
@@ -342,7 +372,7 @@ export default function App() {
 
         if (brush.style === "mist") {
           const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.08 * brush.flow * opacityScale);
+          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * inkFlow);
           ctx.beginPath();
           ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
@@ -352,6 +382,9 @@ export default function App() {
             if (Math.random() < 0.4) {
               addDryEdge(ctx, cx, cy, washSize * 0.9, deepRgb, 0.6 + bandBoost);
             }
+          }
+          if (Math.random() < 0.4) {
+            addWaterHalo(ctx, cx, cy, washSize * 0.9, baseRgb, 0.5 + wateriness * 0.35);
           }
         }
 
@@ -369,9 +402,9 @@ export default function App() {
           ctx.save();
           ctx.globalCompositeOperation = "screen";
           const haloGradient = ctx.createRadialGradient(cx, cy, washSize * 0.15, cx, cy, washSize * 0.95);
-          const coolTone = mixColor(baseRgb, { r: 140, g: 200, b: 255 }, 0.45);
+          const coolTone = mixColor(baseRgb, { r: 140, g: 200, b: 255 }, 0.35);
           haloGradient.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.05));
-          haloGradient.addColorStop(0.5, rgba(coolTone, 0.12 + localEnergy.rms * 0.2));
+          haloGradient.addColorStop(0.5, rgba(coolTone, 0.06 + localEnergy.rms * 0.12));
           haloGradient.addColorStop(1, rgba(baseRgb, 0));
           ctx.fillStyle = haloGradient;
           ctx.beginPath();
@@ -386,7 +419,7 @@ export default function App() {
         if (brush.style === "rake") {
           const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
           const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
-          const alphaBase = (0.1 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * opacityScale;
+          const alphaBase = (0.06 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * inkFlow;
 
           for (let b = 0; b < bristles; b += 1) {
             if (Math.random() < brush.grain * 0.2) continue;
@@ -420,7 +453,7 @@ export default function App() {
               baseSize * (0.7 + Math.random() * 0.6),
               angle,
               deepRgb,
-              (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
+              (0.12 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * inkFlow
             );
           }
           if (Math.random() < 0.2 * dryness) {
@@ -435,7 +468,7 @@ export default function App() {
           const filamentLength = 2.5 + localBands.high * 6 + localEnergy.peak * 3;
           const angleSeed = Math.random() * Math.PI * 2;
           ctx.save();
-          ctx.strokeStyle = rgba(deepRgb, (0.18 + localEnergy.rms * 0.25) * brush.flow * opacityScale);
+          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.25) * brush.flow * inkFlow);
           ctx.lineWidth = 0.25 * sizeResponse;
           ctx.beginPath();
           for (let f = 0; f < filamentCount; f += 1) {
@@ -456,7 +489,7 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.35 + Math.random() * 0.5) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.35 + localEnergy.peak * 0.35) * opacityScale);
+            ctx.fillStyle = rgba(baseRgb, (0.2 + localEnergy.peak * 0.32) * inkFlow);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
@@ -469,7 +502,7 @@ export default function App() {
 
         if (whisper && brush.style !== "mist") {
           const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * opacityScale);
+          ctx.fillStyle = rgba(mistRgb, 0.03 * brush.flow * inkFlow);
           ctx.beginPath();
           ctx.ellipse(cx, cy, hazeSize, hazeSize * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
@@ -482,8 +515,9 @@ export default function App() {
             const hx = cx + (Math.random() - 0.5) * scatter;
             const hy = cy + (Math.random() - 0.5) * scatter;
             const size = (0.4 + Math.random() * (1 + splashIntensity)) * sizeResponse;
-            const alpha = 0.6 * splashIntensity * (whisper ? 0.5 : 1) * opacityScale;
-            ctx.fillStyle = rgba(mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2), alpha);
+            const alpha = 0.32 * splashIntensity * (whisper ? 0.5 : 1) * inkFlow;
+            const splashRgb = mixColor(baseRgb, paperRgb, 0.3 + waterRatio * 0.35);
+            ctx.fillStyle = rgba(splashRgb, alpha);
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
@@ -492,7 +526,7 @@ export default function App() {
           if (Math.random() < 0.12 * splashIntensity) {
             const len = 8 + 12 * splashIntensity;
             const ang = Math.random() * Math.PI * 2;
-            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.35 * splashIntensity * opacityScale, 0.5);
+            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.18 * splashIntensity * inkFlow, 0.5);
           }
 
           if (localEnergy.peak > 0.18 && Math.random() < 0.5) {
@@ -527,21 +561,23 @@ export default function App() {
         sizeRange.removeEventListener("change", onInput);
       };
     };
-    const setupOpacityControls = () => {
-      const opacityRange = document.getElementById("opacity-range");
-      const opacityValue = document.getElementById("opacity-value");
-      const updateOpacity = (value) => {
-        const numeric = parseFloat(value);
-        opacityScale = clamp(numeric, 0.05, 1.4);
-        opacityValue.textContent = `${Math.round(opacityScale * 100)}%`;
+    const setupDilutionControls = () => {
+      const dilutionRange = document.getElementById("dilution-range");
+      const dilutionValue = document.getElementById("dilution-value");
+      const updateDilution = (value) => {
+        const numeric = clamp(parseFloat(value), 0, 100);
+        const inkRatio = numeric / 100;
+        waterRatio = 1 - inkRatio;
+        inkFlow = 0.2 + inkRatio * 0.75;
+        dilutionValue.textContent = `Encre ${Math.round(inkRatio * 100)} / Eau ${Math.round(waterRatio * 100)}`;
       };
-      const onInput = (event) => updateOpacity(event.target.value);
-      opacityRange.addEventListener("input", onInput);
-      opacityRange.addEventListener("change", onInput);
-      updateOpacity(opacityRange.value);
+      const onInput = (event) => updateDilution(event.target.value);
+      dilutionRange.addEventListener("input", onInput);
+      dilutionRange.addEventListener("change", onInput);
+      updateDilution(dilutionRange.value);
       return () => {
-        opacityRange.removeEventListener("input", onInput);
-        opacityRange.removeEventListener("change", onInput);
+        dilutionRange.removeEventListener("input", onInput);
+        dilutionRange.removeEventListener("change", onInput);
       };
     };
 
@@ -1503,7 +1539,7 @@ export default function App() {
     canvasWrap.addEventListener("pointerup", onCanvasRelease);
     canvasWrap.addEventListener("pointercancel", onCanvasRelease);
     const cleanupSize = setupBrushSizeControls();
-    const cleanupOpacity = setupOpacityControls();
+    const cleanupOpacity = setupDilutionControls();
     const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
@@ -1661,13 +1697,13 @@ export default function App() {
               type="button"
               onClick={() => toggleMenuSection("opacity")}
             >
-              Opacité
+              Dilution
               <span className="accordion-indicator">{menuSections.opacity ? "−" : "+"}</span>
             </button>
             <div className="accordion-panel">
               <div className="size-row">
-                <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
-                <span id="opacity-value" className="size-value">85%</span>
+                <input id="dilution-range" type="range" min="0" max="100" step="1" defaultValue="72" />
+                <span id="dilution-value" className="size-value">Encre 72 / Eau 28</span>
               </div>
             </div>
           </section>
