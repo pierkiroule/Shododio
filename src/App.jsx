@@ -873,6 +873,11 @@ export default function App() {
 
   return (
     <div className="app">
+      <svg className="filter-defs" aria-hidden="true">
+        <filter id="ink-sharpen">
+          <feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" />
+        </filter>
+      </svg>
       <div id="boot-screen" className="overlay">
         <h1>LA VOIX DU SHODO</h1>
         <p className="boot-subtitle">RITUEL VOCAL</p>
