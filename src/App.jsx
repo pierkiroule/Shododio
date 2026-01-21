@@ -4,10 +4,8 @@ const brushes = [
   { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.25, flow: 0.75, jitter: 0.55, grain: 0.5 },
   { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.8, flow: 0.28, jitter: 0.18, grain: 0.2 },
   { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.7, flow: 0.55, jitter: 0.3, grain: 0.75 },
-  { id: "hana", name: "Hana", style: "petal", baseSize: 14, bristles: 6, spread: 2.1, flow: 0.65, jitter: 0.22, grain: 0.15 },
-  { id: "hibana", name: "Hibana", style: "spark", baseSize: 5, bristles: 6, spread: 2.6, flow: 1.05, jitter: 0.8, grain: 0.1 },
-  { id: "mizu", name: "Mizu", style: "water", baseSize: 20, bristles: 5, spread: 2.4, flow: 0.6, jitter: 0.25, grain: 0.05 },
-  { id: "enso", name: "Enso", style: "halo", baseSize: 18, bristles: 8, spread: 2.2, flow: 0.4, jitter: 0.15, grain: 0.15 }
+  { id: "shuto", name: "Shuto", style: "alcohol", baseSize: 18, bristles: 6, spread: 2.4, flow: 0.5, jitter: 0.2, grain: 0.1 },
+  { id: "keisen", name: "Keisen", style: "filament", baseSize: 8, bristles: 12, spread: 1.4, flow: 0.7, jitter: 0.2, grain: 0.15 }
 ];
 
 const inkPalette = [
@@ -92,7 +90,6 @@ export default function App() {
     const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
-    let blurScale = 0;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -143,6 +140,7 @@ export default function App() {
 
       const onPointerDown = (event) => {
         if (event.button !== 0) return;
+        if (event.cancelable) event.preventDefault();
         isDragging = true;
         const rect = target.getBoundingClientRect();
         startX = event.clientX;
@@ -247,17 +245,6 @@ export default function App() {
       ctx.restore();
     };
 
-    const drawPetalStamp = (ctx, cx, cy, size, angle, color, alpha) => {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle);
-      ctx.fillStyle = rgba(color, alpha);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, size * 1.1, size * 0.45, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    };
-
     const drawScaleStamp = (ctx, cx, cy, size, angle, color, alpha) => {
       ctx.save();
       ctx.translate(cx, cy);
@@ -299,7 +286,6 @@ export default function App() {
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
       ctx.save();
-      ctx.filter = blurScale > 0 ? `blur(${blurScale}px)` : "none";
       ctx.globalCompositeOperation = "multiply";
 
       let dx = x2 - x1;
@@ -341,25 +327,29 @@ export default function App() {
           }
         }
 
-        if (brush.style === "water") {
-          const washSize = (brush.baseSize * brushSizeScale * 1.6 + localBands.low * 22) * pressure * sizeResponse;
+        if (brush.style === "alcohol") {
+          const washSize = (brush.baseSize * brushSizeScale * 1.7 + localBands.low * 20) * pressure * sizeResponse;
+          const dilution = clamp(0.08 + localEnergy.rms * 0.18, 0.04, 0.22);
           ctx.save();
           ctx.globalCompositeOperation = "destination-out";
-          ctx.fillStyle = `rgba(0, 0, 0, ${clamp(0.04 + localEnergy.rms * 0.12, 0, 0.2)})`;
+          ctx.fillStyle = `rgba(0, 0, 0, ${dilution})`;
           ctx.beginPath();
-          ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
 
-          if (Math.random() < 0.25 + bandBoost * 0.3) {
-            ctx.save();
-            ctx.globalCompositeOperation = "screen";
-            ctx.fillStyle = rgba({ r: 255, g: 255, b: 255 }, 0.05 + localEnergy.rms * 0.15);
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, washSize * 0.75, washSize * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          }
+          ctx.save();
+          ctx.globalCompositeOperation = "screen";
+          const haloGradient = ctx.createRadialGradient(cx, cy, washSize * 0.15, cx, cy, washSize * 0.95);
+          const coolTone = mixColor(baseRgb, { r: 140, g: 200, b: 255 }, 0.45);
+          haloGradient.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.05));
+          haloGradient.addColorStop(0.5, rgba(coolTone, 0.12 + localEnergy.rms * 0.2));
+          haloGradient.addColorStop(1, rgba(baseRgb, 0));
+          ctx.fillStyle = haloGradient;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, washSize * 1.1, washSize * 0.75, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
 
         if (brush.style === "rake") {
@@ -383,27 +373,6 @@ export default function App() {
           }
         }
 
-        if (brush.style === "petal") {
-          const petals = 2 + Math.floor(localBands.mid * 4);
-          const baseSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.mid * 6) * pressure * sizeResponse;
-          for (let p = 0; p < petals; p += 1) {
-            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2 + (p * Math.PI) / petals;
-            const offset = (Math.random() - 0.5) * brush.spread * 6 * sizeResponse;
-            drawPetalStamp(
-              ctx,
-              cx + nx * offset,
-              cy + ny * offset,
-              baseSize * (0.8 + Math.random() * 0.6),
-              angle,
-              baseRgb,
-              (0.2 + localBands.mid * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
-            );
-          }
-          if (Math.random() < 0.2 + bandBoost * 0.3) {
-            addStain(ctx, cx, cy, baseSize * 1.2, baseRgb, 0.4 + bandBoost * 0.4);
-          }
-        }
-
         if (brush.style === "scales") {
           const layers = 1 + Math.floor(localBands.low * 3);
           const baseSize = (brush.baseSize * brushSizeScale * 0.55 + localBands.low * 8) * pressure * sizeResponse;
@@ -422,39 +391,19 @@ export default function App() {
           }
         }
 
-        if (brush.style === "spark") {
-          const burst = Math.max(localBands.high, localEnergy.peak);
-          const sparkCount = 2 + Math.floor(burst * 6);
-          for (let s = 0; s < sparkCount; s += 1) {
-            const angle = Math.random() * Math.PI * 2;
-            const length = (4 + Math.random() * 12) * (0.5 + burst) * sizeResponse;
-            drawSpark(ctx, cx, cy, length, angle, mistRgb, 0.35 + burst * 0.5, 0.4 + Math.random() * 0.8);
-          }
-          if (Math.random() < 0.5 + burst * 0.4) {
-            const scatter = (8 + burst * 22) * brush.spread;
-            const hx = cx + (Math.random() - 0.5) * scatter;
-            const hy = cy + (Math.random() - 0.5) * scatter;
-            const size = (0.5 + Math.random() * (1 + burst * 1.2)) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.25 + burst * 0.6) * opacityScale);
-            ctx.beginPath();
-            ctx.arc(hx, hy, size, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-
-        if (brush.style === "halo") {
-          const filamentCount = 24 + Math.floor(localBands.high * 48);
-          const baseRadius = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 26) * (0.7 + bandBoost * 0.6);
-          const radialJitter = 2 + localBands.high * 10 + localEnergy.rms * 8;
-          const filamentLength = 4 + localBands.high * 16 + localEnergy.peak * 10;
+        if (brush.style === "filament") {
+          const filamentCount = 18 + Math.floor(localBands.high * 16);
+          const baseRadius = (brush.baseSize * brushSizeScale * 0.9 + localBands.low * 8) * (0.6 + bandBoost * 0.4);
+          const radialJitter = 1.2 + localBands.high * 4 + localEnergy.rms * 2;
+          const filamentLength = 2.5 + localBands.high * 6 + localEnergy.peak * 3;
           const angleSeed = Math.random() * Math.PI * 2;
           ctx.save();
-          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.35) * brush.flow * opacityScale);
-          ctx.lineWidth = 0.35 * sizeResponse;
+          ctx.strokeStyle = rgba(deepRgb, (0.18 + localEnergy.rms * 0.25) * brush.flow * opacityScale);
+          ctx.lineWidth = 0.25 * sizeResponse;
           ctx.beginPath();
           for (let f = 0; f < filamentCount; f += 1) {
-            const angle = angleSeed + (f / filamentCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
-            const radius = baseRadius + Math.sin(angle * 3) * radialJitter + (Math.random() - 0.5) * radialJitter;
+            const angle = angleSeed + (f / filamentCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
+            const radius = baseRadius + Math.sin(angle * 2) * radialJitter + (Math.random() - 0.5) * radialJitter;
             const ax = cx + Math.cos(angle) * radius;
             const ay = cy + Math.sin(angle) * radius;
             const bx = cx + Math.cos(angle) * (radius + filamentLength);
@@ -463,11 +412,18 @@ export default function App() {
             ctx.lineTo(bx, by);
           }
           ctx.stroke();
-          ctx.strokeStyle = rgba(mistRgb, 0.08 * opacityScale);
-          ctx.lineWidth = 0.6 * sizeResponse;
-          ctx.beginPath();
-          ctx.arc(cx, cy, baseRadius * 0.7, 0, Math.PI * 2);
-          ctx.stroke();
+
+          const splashes = Math.random() < 0.5 ? 2 : 5;
+          for (let s = 0; s < splashes; s += 1) {
+            const scatter = (3 + localEnergy.peak * 6) * brush.spread;
+            const hx = cx + (Math.random() - 0.5) * scatter;
+            const hy = cy + (Math.random() - 0.5) * scatter;
+            const size = (0.35 + Math.random() * 0.5) * sizeResponse;
+            ctx.fillStyle = rgba(baseRgb, (0.35 + localEnergy.peak * 0.35) * opacityScale);
+            ctx.beginPath();
+            ctx.arc(hx, hy, size, 0, Math.PI * 2);
+            ctx.fill();
+          }
           ctx.restore();
         }
 
@@ -546,24 +502,6 @@ export default function App() {
       return () => {
         opacityRange.removeEventListener("input", onInput);
         opacityRange.removeEventListener("change", onInput);
-      };
-    };
-
-    const setupBlurControls = () => {
-      const blurRange = document.getElementById("blur-range");
-      const blurValue = document.getElementById("blur-value");
-      const updateBlur = (value) => {
-        const numeric = parseFloat(value);
-        blurScale = clamp(numeric, 0, 12);
-        blurValue.textContent = `${blurScale.toFixed(1)}px`;
-      };
-      const onInput = (event) => updateBlur(event.target.value);
-      blurRange.addEventListener("input", onInput);
-      blurRange.addEventListener("change", onInput);
-      updateBlur(blurRange.value);
-      return () => {
-        blurRange.removeEventListener("input", onInput);
-        blurRange.removeEventListener("change", onInput);
       };
     };
 
@@ -1475,7 +1413,6 @@ export default function App() {
     canvasWrap.addEventListener("pointerdown", onCanvasTap);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
-    const cleanupBlur = setupBlurControls();
     const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
@@ -1504,7 +1441,6 @@ export default function App() {
       cleanupToolbarDrag();
       cleanupSize();
       cleanupOpacity();
-      cleanupBlur();
       cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
@@ -1626,13 +1562,6 @@ export default function App() {
             </button>
             <div className="accordion-panel">
               <div className="minimal-controls">
-                <div className="control-block slider-block">
-                  <div className="control-label">Blur FX</div>
-                  <div className="size-row">
-                    <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
-                    <span id="blur-value" className="size-value">0.0px</span>
-                  </div>
-                </div>
                 <div className="control-block slider-block">
                   <div className="control-label">Cycles</div>
                   <label className="size-row toggle-row">
