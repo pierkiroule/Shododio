@@ -57,7 +57,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     let waterRatio = 0.28;
     let resizeObserver;
 
-    const CANVAS_SCALE = 3;
+    const BASE_CANVAS_SCALE = 3;
+    const MAX_CANVAS_SCALE = 5;
+    const deviceScale = window.devicePixelRatio || 1;
+    const CANVAS_SCALE = Math.max(BASE_CANVAS_SCALE, Math.min(MAX_CANVAS_SCALE, deviceScale * 2));
     const PREVIEW_LONG_EDGE = 360;
     const PREVIEW_FPS = 20;
     const MAX_CYCLES = 5;
@@ -125,12 +128,13 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       const grainScale = 1 - waterRatio * 0.35;
       const jitterScale = 0.8 + waterRatio * 0.4;
       const sizeScale = Math.max(0.35, brushSizeScale);
+      const renderScale = CANVAS_SCALE / BASE_CANVAS_SCALE;
 
       const b = activeBrushRef.current;
 
       return {
         ...b,
-        baseSize: b.baseSize * sizeScale,
+        baseSize: b.baseSize * sizeScale * renderScale,
         flow: clamp(b.flow * flowScale, 0.05, 2),
         wetness: clamp(b.wetness * wetnessScale, 0.05, 2.5),
         grain: clamp(b.grain * grainScale, 0, 1),
