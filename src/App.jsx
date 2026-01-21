@@ -49,6 +49,7 @@ export default function App() {
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryExportOpen, setGalleryExportOpen] = useState(false);
 
   const updateCycles = useCallback((updater) => {
     setCycles((prev) => {
@@ -1666,70 +1667,84 @@ export default function App() {
                 )}
               </div>
               <div className="gallery-export">
-                <div className="gallery-export-row">
+                <div className="gallery-export-header">
+                  <div className="control-label">Exports</div>
                   <button
                     className="chip-btn"
                     type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
+                    onClick={() => setGalleryExportOpen((prev) => !prev)}
                   >
-                    Images HD sélectionnées
-                  </button>
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
-                  >
-                    Image globale
+                    {galleryExportOpen ? "Masquer" : "Afficher"}
                   </button>
                 </div>
-                <div className="gallery-export-row">
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
-                  >
-                    AV cycles
-                  </button>
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
-                  >
-                    AV groupé
-                  </button>
-                </div>
-                <div className="gallery-export-row">
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
-                  >
-                    GIF stop-motion
-                  </button>
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
-                  >
-                    GIF reverse
-                  </button>
-                </div>
-                <div className="gallery-export-row">
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    disabled={!selectedCycles.length}
-                    onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
-                  >
-                    Export ZIP groupé
-                  </button>
-                </div>
+                {galleryExportOpen ? (
+                  <>
+                    <div className="gallery-export-row">
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
+                      >
+                        Images HD sélectionnées
+                      </button>
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
+                      >
+                        Image globale
+                      </button>
+                    </div>
+                    <div className="gallery-export-row">
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
+                      >
+                        AV cycles
+                      </button>
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
+                      >
+                        AV groupé
+                      </button>
+                    </div>
+                    <div className="gallery-export-row">
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
+                      >
+                        GIF stop-motion
+                      </button>
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
+                      >
+                        GIF reverse
+                      </button>
+                    </div>
+                    <div className="gallery-export-row">
+                      <button
+                        className="chip-btn"
+                        type="button"
+                        disabled={!selectedCycles.length}
+                        onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
+                      >
+                        Export ZIP groupé
+                      </button>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </>
           ) : null}

@@ -552,6 +552,13 @@ canvas {
   gap: 8px;
 }
 
+.gallery-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .gallery-export-row {
   display: flex;
   flex-wrap: wrap;
