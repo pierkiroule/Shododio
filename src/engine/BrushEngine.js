@@ -1,14 +1,5 @@
-export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-export const mixColor = (rgb, target, amount) => ({
-  r: Math.round(rgb.r + (target.r - rgb.r) * amount),
-  g: Math.round(rgb.g + (target.g - rgb.g) * amount),
-  b: Math.round(rgb.b + (target.b - rgb.b) * amount)
-});
-
-export const rgba = (rgb, alpha) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(alpha, 0, 1)})`;
-
-export const paperRgb = { r: 244, g: 241, b: 234 };
+import { mixColor, paperRgb, rgba } from "../utils/color";
+import { clamp } from "../utils/math";
 
 const mulberry32 = (seed) => {
   let t = seed >>> 0;
