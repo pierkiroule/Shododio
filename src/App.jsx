@@ -191,6 +191,64 @@ export default function App() {
       ctx.restore();
     };
 
+    const addDryEdge = (ctx, cx, cy, size, baseRgb, intensity) => {
+      const radius = Math.max(8, size * 1.1);
+      const edge = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
+      edge.addColorStop(0.0, rgba(baseRgb, 0));
+      edge.addColorStop(0.55, rgba(baseRgb, 0.02 * intensity * opacityScale));
+      edge.addColorStop(0.9, rgba(baseRgb, 0.12 * intensity * opacityScale));
+      edge.addColorStop(1, rgba(baseRgb, 0));
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = edge;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, radius * 1.05, radius * 0.8, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const addWetTrace = (ctx, cx, cy, size, baseRgb, intensity, dirX, dirY) => {
+      const length = size * (1.2 + intensity * 1.6);
+      const width = size * (0.4 + intensity * 0.6);
+      const traceColor = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.2);
+      const grad = ctx.createLinearGradient(
+        cx - dirX * length * 0.5,
+        cy - dirY * length * 0.5,
+        cx + dirX * length * 0.6,
+        cy + dirY * length * 0.6
+      );
+      grad.addColorStop(0, rgba(traceColor, 0));
+      grad.addColorStop(0.35, rgba(traceColor, 0.08 * intensity * opacityScale));
+      grad.addColorStop(0.7, rgba(baseRgb, 0.16 * intensity * opacityScale));
+      grad.addColorStop(1, rgba(baseRgb, 0));
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, length, width, Math.atan2(dirY, dirX), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const addGranulation = (ctx, cx, cy, size, baseRgb, intensity) => {
+      const specks = Math.round(6 + intensity * 12);
+      const pale = mixColor(baseRgb, { r: 245, g: 240, b: 230 }, 0.5);
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      for (let i = 0; i < specks; i += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * size * 0.9;
+        const sx = cx + Math.cos(angle) * radius;
+        const sy = cy + Math.sin(angle) * radius;
+        const dot = (0.3 + Math.random() * 0.7) * (0.7 + intensity);
+        ctx.fillStyle = rgba(pale, 0.08 * intensity * opacityScale);
+        ctx.beginPath();
+        ctx.arc(sx, sy, dot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
     const drawScaleStamp = (ctx, cx, cy, size, angle, color, alpha) => {
       ctx.save();
       ctx.translate(cx, cy);
@@ -230,6 +288,9 @@ export default function App() {
       const baseRgb = hexToRgb(activeInk.value);
       const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.35);
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
+      const wateriness = clamp(0.2 + localBands.low * 0.9 + localEnergy.rms * 0.6, 0, 1.6);
+      const dryness = clamp(1.1 - wateriness + localBands.high * 0.35, 0.15, 1.4);
+      const fineDetail = clamp(localBands.high * 0.8 + localEnergy.peak * 0.6, 0, 1.2);
 
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
@@ -261,6 +322,18 @@ export default function App() {
         cx += (Math.random() - 0.5) * jitterBase;
         cy += (Math.random() - 0.5) * jitterBase;
 
+        if (Math.random() < 0.12 * wateriness && len > 0) {
+          addWetTrace(ctx, cx, cy, 6 + brush.baseSize * 0.6, baseRgb, wateriness, dirX, dirY);
+        }
+
+        if (Math.random() < 0.1 * dryness) {
+          addDryEdge(ctx, cx, cy, 6 + brush.baseSize * 0.8, deepRgb, dryness);
+        }
+
+        if (Math.random() < 0.18 * (0.4 + fineDetail)) {
+          addGranulation(ctx, cx, cy, 6 + brush.baseSize, baseRgb, 0.4 + fineDetail);
+        }
+
         if (brush.style === "mist") {
           const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
           ctx.fillStyle = rgba(mistRgb, 0.08 * brush.flow * opacityScale);
@@ -270,6 +343,9 @@ export default function App() {
 
           if (Math.random() < 0.15 + bandBoost * 0.4) {
             addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, 0.4 + bandBoost * 0.5);
+            if (Math.random() < 0.4) {
+              addDryEdge(ctx, cx, cy, washSize * 0.9, deepRgb, 0.6 + bandBoost);
+            }
           }
         }
 
@@ -296,6 +372,9 @@ export default function App() {
           ctx.ellipse(cx, cy, washSize * 1.1, washSize * 0.75, Math.random() * Math.PI, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
+          if (Math.random() < 0.25) {
+            addWetTrace(ctx, cx, cy, washSize * 0.65, baseRgb, 0.45 + wateriness * 0.4, dirX, dirY);
+          }
         }
 
         if (brush.style === "rake") {
@@ -317,6 +396,9 @@ export default function App() {
             ctx.lineTo(mx + dirX * length, my + dirY * length);
             ctx.stroke();
           }
+          if (Math.random() < 0.2 + fineDetail * 0.2) {
+            addGranulation(ctx, cx, cy, rakeWidth * 0.6, baseRgb, 0.35 + fineDetail);
+          }
         }
 
         if (brush.style === "scales") {
@@ -334,6 +416,9 @@ export default function App() {
               deepRgb,
               (0.18 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * opacityScale
             );
+          }
+          if (Math.random() < 0.2 * dryness) {
+            addDryEdge(ctx, cx, cy, baseSize * 1.2, deepRgb, 0.6 + dryness);
           }
         }
 
@@ -369,6 +454,9 @@ export default function App() {
             ctx.beginPath();
             ctx.arc(hx, hy, size, 0, Math.PI * 2);
             ctx.fill();
+          }
+          if (Math.random() < 0.25) {
+            addWetTrace(ctx, cx, cy, baseRadius * 0.7, baseRgb, 0.35 + wateriness, dirX, dirY);
           }
           ctx.restore();
         }
