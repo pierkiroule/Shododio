@@ -65,6 +65,7 @@ export default function App() {
     const MIN_BRUSH_SCALE = 0.05;
     let brushSizeScale = 1;
     let opacityScale = 0.85;
+    let blurScale = 0;
     const bands = { low: 0, mid: 0, high: 0 };
     const SILENCE_THRESHOLD = 0.01;
     const audioEnergy = { rms: 0, peak: 0 };
@@ -77,11 +78,13 @@ export default function App() {
     let resizeObserver;
     let allowLayering = true;
     let lastFrameTime = performance.now();
-    const voiceState = {
+    let guidePath = [];
+    let guideActive = false;
+    const ink = {
       x: 0,
       y: 0,
-      angle: 0,
-      velocity: 0
+      vx: 0,
+      vy: 0
     };
 
     const mainBtn = document.getElementById("main-btn");
@@ -107,12 +110,81 @@ export default function App() {
 
     const resizeCanvas = () => {
       const rect = canvasWrap.getBoundingClientRect();
+      const prevWidth = paper.width;
+      const prevHeight = paper.height;
       const width = Math.max(1, Math.floor(rect.width * CANVAS_SCALE));
       const height = Math.max(1, Math.floor(rect.height * CANVAS_SCALE));
       if (paper.width === width && paper.height === height) return;
       paper.width = width;
       paper.height = height;
       clearAll();
+      if (prevWidth > 0 && prevHeight > 0) {
+        const scaleX = width / prevWidth;
+        const scaleY = height / prevHeight;
+        guidePath = guidePath.map((point) => ({
+          x: point.x * scaleX,
+          y: point.y * scaleY
+        }));
+        ink.x *= scaleX;
+        ink.y *= scaleY;
+      }
+    };
+
+    const getPointerPos = (event) => {
+      const rect = canvasWrap.getBoundingClientRect();
+      const scaleX = rect.width > 0 ? paper.width / rect.width : 1;
+      const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
+      const x = clamp((event.clientX - rect.left) * scaleX, 0, paper.width);
+      const y = clamp((event.clientY - rect.top) * scaleY, 0, paper.height);
+      return { x, y };
+    };
+
+    const onPointerDown = (event) => {
+      if (!canvasWrap) return;
+      guidePath = [];
+      guideActive = true;
+      const point = getPointerPos(event);
+      guidePath.push(point);
+      canvasWrap.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    };
+
+    const onPointerMove = (event) => {
+      if (!guideActive) return;
+      const point = getPointerPos(event);
+      const last = guidePath[guidePath.length - 1];
+      if (!last) {
+        guidePath.push(point);
+        return;
+      }
+      const distance = Math.hypot(point.x - last.x, point.y - last.y);
+      if (distance > 4 * CANVAS_SCALE) {
+        guidePath.push(point);
+      }
+    };
+
+    const onPointerUp = (event) => {
+      if (!guideActive) return;
+      guideActive = false;
+      canvasWrap.releasePointerCapture(event.pointerId);
+    };
+
+    const attractToGuide = (x, y, strength) => {
+      if (guidePath.length < 2) return { x, y };
+      let closest = null;
+      let minDist = Infinity;
+      for (const point of guidePath) {
+        const distance = Math.hypot(point.x - x, point.y - y);
+        if (distance < minDist) {
+          minDist = distance;
+          closest = point;
+        }
+      }
+      if (!closest) return { x, y };
+      return {
+        x: x + (closest.x - x) * strength,
+        y: y + (closest.y - y) * strength
+      };
     };
 
     const addSplatter = (ctx, cx, cy, intensity, baseRgb) => {
@@ -198,6 +270,7 @@ export default function App() {
       const mistRgb = mixColor(baseRgb, { r: 255, g: 255, b: 255 }, 0.5);
 
       ctx.save();
+      ctx.filter = blurScale > 0 ? `blur(${blurScale}px)` : "none";
       ctx.globalCompositeOperation = "multiply";
 
       let dx = x2 - x1;
@@ -447,6 +520,24 @@ export default function App() {
       };
     };
 
+    const setupBlurControls = () => {
+      const blurRange = document.getElementById("blur-range");
+      const blurValue = document.getElementById("blur-value");
+      const updateBlur = (value) => {
+        const numeric = parseFloat(value);
+        blurScale = clamp(numeric, 0, 12);
+        blurValue.textContent = `${blurScale.toFixed(1)}px`;
+      };
+      const onInput = (event) => updateBlur(event.target.value);
+      blurRange.addEventListener("input", onInput);
+      blurRange.addEventListener("change", onInput);
+      updateBlur(blurRange.value);
+      return () => {
+        blurRange.removeEventListener("input", onInput);
+        blurRange.removeEventListener("change", onInput);
+      };
+    };
+
     const setupControls = () => {
       const brushContainer = document.getElementById("brush-options");
       const colorContainer = document.getElementById("color-options");
@@ -609,51 +700,50 @@ export default function App() {
     };
 
     const resetVoiceState = () => {
-      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
-      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
-      voiceState.angle = Math.random() * Math.PI * 2;
-      voiceState.velocity = 0;
+      ink.x = paper.width * 0.5;
+      ink.y = paper.height * 0.5;
+      ink.vx = 0;
+      ink.vy = 0;
       lastFrameTime = performance.now();
     };
 
     const paintFromVoice = (timestamp) => {
       const delta = Math.min(48, timestamp - lastFrameTime);
       lastFrameTime = timestamp;
-      const energy = audioEnergy.rms;
-      const burst = audioEnergy.peak;
-      const loudness = clamp(energy + burst * 0.6, 0, 1.2);
-      const targetVelocity = clamp(1.2 + loudness * 18 + bands.mid * 6, 1.2, 24);
-      voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
+      const energy = bands.low * 0.6 + bands.mid * 0.4 + audioEnergy.rms * 0.4;
+      ink.vx += (Math.random() - 0.5) * energy * 2;
+      ink.vy += (Math.random() - 0.5) * energy * 2;
 
-      const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
-      voiceState.angle += turnAmount;
+      ink.vx *= 0.92;
+      ink.vy *= 0.92;
 
-      const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
-      const dy = Math.sin(voiceState.angle) * voiceState.velocity * (delta / 16);
-      const nx = voiceState.x + dx;
-      const ny = voiceState.y + dy;
+      const guided = attractToGuide(ink.x, ink.y, 0.04 + bands.low * 0.12);
+      ink.vx += guided.x - ink.x;
+      ink.vy += guided.y - ink.y;
 
-      drawSpectralBrush(ctxP, voiceState.x, voiceState.y, nx, ny);
-
-      voiceState.x = nx;
-      voiceState.y = ny;
+      const prevX = ink.x;
+      const prevY = ink.y;
+      ink.x += ink.vx * (delta / 16);
+      ink.y += ink.vy * (delta / 16);
 
       const margin = 40 * CANVAS_SCALE;
-      if (voiceState.x < margin) {
-        voiceState.x = margin;
-        voiceState.angle = Math.PI - voiceState.angle;
-      } else if (voiceState.x > paper.width - margin) {
-        voiceState.x = paper.width - margin;
-        voiceState.angle = Math.PI - voiceState.angle;
+      if (ink.x < margin) {
+        ink.x = margin;
+        ink.vx = Math.abs(ink.vx) * 0.6;
+      } else if (ink.x > paper.width - margin) {
+        ink.x = paper.width - margin;
+        ink.vx = -Math.abs(ink.vx) * 0.6;
       }
 
-      if (voiceState.y < margin) {
-        voiceState.y = margin;
-        voiceState.angle = -voiceState.angle;
-      } else if (voiceState.y > paper.height - margin) {
-        voiceState.y = paper.height - margin;
-        voiceState.angle = -voiceState.angle;
+      if (ink.y < margin) {
+        ink.y = margin;
+        ink.vy = Math.abs(ink.vy) * 0.6;
+      } else if (ink.y > paper.height - margin) {
+        ink.y = paper.height - margin;
+        ink.vy = -Math.abs(ink.vy) * 0.6;
       }
+
+      drawSpectralBrush(ctxP, prevX, prevY, ink.x, ink.y);
     };
 
     const startDrawingCycle = () => {
@@ -790,12 +880,18 @@ export default function App() {
     stopBtn.addEventListener("click", onStop);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
+    const cleanupBlur = setupBlurControls();
     const cleanupLayering = setupLayeringControl();
     setupControls();
     resizeCanvas();
     updateCycleStatus();
     saveVideoBtn.disabled = true;
     resetVoiceState();
+    canvasWrap.addEventListener("pointerdown", onPointerDown);
+    canvasWrap.addEventListener("pointermove", onPointerMove);
+    canvasWrap.addEventListener("pointerup", onPointerUp);
+    canvasWrap.addEventListener("pointercancel", onPointerUp);
+    canvasWrap.addEventListener("pointerleave", onPointerUp);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -804,6 +900,7 @@ export default function App() {
     return () => {
       cleanupSize();
       cleanupOpacity();
+      cleanupBlur();
       cleanupLayering();
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
@@ -813,6 +910,11 @@ export default function App() {
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
+      canvasWrap.removeEventListener("pointerdown", onPointerDown);
+      canvasWrap.removeEventListener("pointermove", onPointerMove);
+      canvasWrap.removeEventListener("pointerup", onPointerUp);
+      canvasWrap.removeEventListener("pointercancel", onPointerUp);
+      canvasWrap.removeEventListener("pointerleave", onPointerUp);
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, []);
@@ -884,6 +986,13 @@ export default function App() {
             <div className="size-row">
               <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
               <span id="opacity-value" className="size-value">85%</span>
+            </div>
+          </div>
+          <div className="control-block slider-block">
+            <div className="control-label">Blur FX</div>
+            <div className="size-row">
+              <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
+              <span id="blur-value" className="size-value">0.0px</span>
             </div>
           </div>
           <div className="control-block slider-block">
