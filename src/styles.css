@@ -38,7 +38,7 @@ body {
 }
 
 .canvas-area {
-  flex: 0 0 70%;
+  flex: 0 0 65%;
   position: relative;
   overflow: hidden;
   background: var(--bg);
@@ -240,7 +240,7 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 0 0 30%;
+  flex: 0 0 35%;
   overflow-y: auto;
   align-items: center;
 }
