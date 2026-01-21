@@ -71,6 +71,52 @@ canvas {
   transform-origin: center;
 }
 
+.guide-marker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 80;
+  opacity: 0.65;
+}
+
+.guide-marker::before,
+.guide-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 2px;
+  background: rgba(13, 13, 13, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+.guide-marker::after {
+  width: 2px;
+  height: 24px;
+}
+
+.guide-marker__core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 13, 13, 0.45);
+  transform: translate(-50%, -50%);
+}
+
+.guide-marker.dragging {
+  opacity: 0.9;
+}
+
 .ui-layer {
   position: absolute;
   inset: 0;
@@ -421,6 +467,19 @@ canvas {
 }
 
 @media (max-width: 720px) {
+  .guide-marker {
+    width: 32px;
+    height: 32px;
+  }
+
+  .guide-marker::before {
+    width: 20px;
+  }
+
+  .guide-marker::after {
+    height: 20px;
+  }
+
   .tools-area {
     padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
   }
