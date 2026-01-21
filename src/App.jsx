@@ -59,7 +59,7 @@ export default function App() {
     let mediaStream;
     let phase = "READY";
     let startTime = 0;
-    let timeLimit = 7000;
+    let timeLimit = 10000;
     let remainingTime = 0;
     const CANVAS_SCALE = 3;
     const MIN_BRUSH_SCALE = 0.05;
@@ -695,7 +695,7 @@ export default function App() {
 
     const startDrawingCycle = () => {
       phase = "DRAWING";
-      timeLimit = 7000;
+      timeLimit = 10000;
       startTime = Date.now();
       remainingTime = timeLimit;
       resetVoiceState();
@@ -883,13 +883,14 @@ export default function App() {
         <canvas id="paper-layer" ref={canvasRef}></canvas>
         <div className="paper-texture"></div>
         <div id="ui-layer" className="ui-layer">
+          <div className="shodo-indicator" aria-hidden="true"></div>
           <div className="top-ui">
             <div id="status-msg">
               <div id="rec-dot"></div>
               <span id="status-text">Prêt à écouter</span>
             </div>
             <div id="timer-container">
-              <div id="timer-display">7.0</div>
+              <div id="timer-display">10.0</div>
               <div id="timer-bar-bg"><div id="timer-bar"></div></div>
               <div id="spectrum-viz">
                 <div id="spec-low" className="spec-bar"></div>
