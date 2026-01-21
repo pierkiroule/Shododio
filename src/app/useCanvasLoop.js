@@ -18,6 +18,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
   const { phaseRef, startTimeRef, timeLimitRef, remainingTimeRef, setPhase } = useRitualState();
   const { touchRef, resetTouch } = useTouchGuide({ canvasWrapRef, canvasRef });
 
+  // ✅ sources stables
+  const activeInkRef = useRef(inkPalette[0]);
+  const activeBrushRef = useRef(brushPresets[0]);
+
+  const toCssColor = (v) => {
+    if (!v) return "rgb(0,0,0)";
+    if (typeof v === "string") return v;
+    return `rgb(${v.r}, ${v.g}, ${v.b})`;
+  };
+
   const { audioRef, startMicrophone } = useMicrophone({
     onSpectrum: ({ bands }) => {
       const { specLow, specMid, specHigh } = uiRef.current;
@@ -45,8 +55,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     let brushSizeScale = 1;
     let inkFlow = 0.72;
     let waterRatio = 0.28;
-    let activeBrush = brushPresets[0];
-    let activeInk = inkPalette[0];
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
@@ -117,15 +125,18 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       const grainScale = 1 - waterRatio * 0.35;
       const jitterScale = 0.8 + waterRatio * 0.4;
       const sizeScale = Math.max(0.35, brushSizeScale);
+
+      const b = activeBrushRef.current;
+
       return {
-        ...activeBrush,
-        baseSize: activeBrush.baseSize * sizeScale,
-        flow: clamp(activeBrush.flow * flowScale, 0.05, 2),
-        wetness: clamp(activeBrush.wetness * wetnessScale, 0.05, 2.5),
-        grain: clamp(activeBrush.grain * grainScale, 0, 1),
-        jitter: activeBrush.jitter * jitterScale * (0.75 + sizeScale * 0.35),
-        bristles: Math.round(activeBrush.bristles * (0.5 + sizeScale * 0.7)),
-        spread: activeBrush.spread * (0.6 + sizeScale * 0.9)
+        ...b,
+        baseSize: b.baseSize * sizeScale,
+        flow: clamp(b.flow * flowScale, 0.05, 2),
+        wetness: clamp(b.wetness * wetnessScale, 0.05, 2.5),
+        grain: clamp(b.grain * grainScale, 0, 1),
+        jitter: b.jitter * jitterScale * (0.75 + sizeScale * 0.35),
+        bristles: Math.round(b.bristles * (0.5 + sizeScale * 0.7)),
+        spread: b.spread * (0.6 + sizeScale * 0.9)
       };
     };
 
@@ -133,19 +144,27 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       const { bands, energy } = audioRef.current;
       const totalVol = bands.low + bands.mid + bands.high + energy.rms;
       if (!force && totalVol < SILENCE_THRESHOLD) return;
-      const inkRgb = inkToRgb(activeInk);
+
+      // ✅ encre toujours à jour
+      const inkRgb = inkToRgb(activeInkRef.current);
       const adjustedInk = mixColor(inkRgb, paperRgb, clamp(waterRatio * 0.45, 0, 0.65));
-      drawBrush(ctxP, { x: x1, y: y1 }, { x: x2, y: y2 }, {
-        ink: adjustedInk,
-        brush: getAdjustedBrush(),
-        drive: {
-          energy: energy.rms,
-          low: bands.low,
-          mid: bands.mid,
-          high: Math.max(bands.high, energy.peak)
-        },
-        dt
-      });
+
+      drawBrush(
+        ctxP,
+        { x: x1, y: y1 },
+        { x: x2, y: y2 },
+        {
+          ink: adjustedInk,
+          brush: getAdjustedBrush(),
+          drive: {
+            energy: energy.rms,
+            low: bands.low,
+            mid: bands.mid,
+            high: Math.max(bands.high, energy.peak)
+          },
+          dt
+        }
+      );
     };
 
     const updateCycleStatus = () => {
@@ -155,16 +174,19 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     const setupBrushSizeControls = () => {
       const sizeRange = document.getElementById("size-range");
       const sizeValue = document.getElementById("size-value");
+
       const updateSizing = (value) => {
         const numeric = parseFloat(value);
         const normalized = clamp(numeric, 0, 3);
         brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
         sizeValue.textContent = `${Math.round(normalized * 100)}%`;
       };
+
       const onInput = (event) => updateSizing(event.target.value);
       sizeRange.addEventListener("input", onInput);
       sizeRange.addEventListener("change", onInput);
       updateSizing(sizeRange.value);
+
       return () => {
         sizeRange.removeEventListener("input", onInput);
         sizeRange.removeEventListener("change", onInput);
@@ -174,6 +196,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     const setupDilutionControls = () => {
       const dilutionRange = document.getElementById("dilution-range");
       const dilutionValue = document.getElementById("dilution-value");
+
       const updateDilution = (value) => {
         const numeric = clamp(parseFloat(value), 0, 100);
         const inkRatio = numeric / 100;
@@ -181,10 +204,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
         inkFlow = 0.2 + inkRatio * 0.75;
         dilutionValue.textContent = `Encre ${Math.round(inkRatio * 100)} / Eau ${Math.round(waterRatio * 100)}`;
       };
+
       const onInput = (event) => updateDilution(event.target.value);
       dilutionRange.addEventListener("input", onInput);
       dilutionRange.addEventListener("change", onInput);
       updateDilution(dilutionRange.value);
+
       return () => {
         dilutionRange.removeEventListener("input", onInput);
         dilutionRange.removeEventListener("change", onInput);
@@ -203,26 +228,30 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
         btn.textContent = brush.name;
         btn.dataset.brushId = brush.id;
         if (index === 0) btn.classList.add("active");
+
         btn.addEventListener("click", () => {
-          activeBrush = brush;
+          activeBrushRef.current = brush;
           [...brushContainer.querySelectorAll(".chip-btn")].forEach((el) => el.classList.remove("active"));
           btn.classList.add("active");
         });
+
         brushContainer.appendChild(btn);
       });
 
       inkPalette.forEach((ink, index) => {
         const chip = document.createElement("button");
         chip.className = "color-chip";
-        chip.style.background = ink.value;
+        chip.style.backgroundColor = toCssColor(ink.value);
         chip.title = ink.name;
         chip.dataset.inkId = ink.id;
         if (index === 0) chip.classList.add("active");
+
         chip.addEventListener("click", () => {
-          activeInk = ink;
+          activeInkRef.current = ink;
           [...colorContainer.querySelectorAll(".color-chip")].forEach((el) => el.classList.remove("active"));
           chip.classList.add("active");
         });
+
         colorContainer.appendChild(chip);
       });
     };
@@ -344,10 +373,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
             energy: { ...audioRef.current.energy }
           },
           snapshot,
-          preview: {
-            avURL: "",
-            imageURL: ""
-          },
+          preview: { avURL: "", imageURL: "" },
           selected: false
         };
         await sampler.createPreviewImage(cycle);
@@ -470,9 +496,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     resetBtn.addEventListener("click", resetRitual);
     mainBtn.addEventListener("click", onMainClick);
     stopBtn.addEventListener("click", onStop);
+
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupDilutionControls();
     const cleanupLayering = setupLayeringControl();
+
     setupControls();
     resizeCanvas();
     updateCycleStatus();
@@ -498,13 +526,28 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       cleanupSize();
       cleanupOpacity();
       cleanupLayering();
+
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
+
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
+
       cyclesRef.current.forEach((cycle) => sampler.cleanupCycleAssets(cycle));
     };
-  }, [audioRef, canvasRef, canvasWrapRef, galleryActionsRef, resetTouch, setPhase, startMicrophone, timeLimitRef, startTimeRef, remainingTimeRef, updateCycles]);
+  }, [
+    audioRef,
+    canvasRef,
+    canvasWrapRef,
+    galleryActionsRef,
+    resetTouch,
+    setPhase,
+    startMicrophone,
+    timeLimitRef,
+    startTimeRef,
+    remainingTimeRef,
+    updateCycles
+  ]);
 };

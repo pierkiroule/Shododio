@@ -51,6 +51,10 @@ canvas {
   display: block;
 }
 
+canvas {
+  background: transparent;
+}
+
 #paper-layer {
   position: absolute;
   inset: 0;
@@ -58,7 +62,7 @@ canvas {
   height: 100%;
   transform: scale(var(--canvas-zoom));
   transform-origin: center;
-  filter: url("#ink-sharpen");
+  filter: none;
 }
 
 .paper-texture {
@@ -66,9 +70,9 @@ canvas {
   inset: 0;
   pointer-events: none;
   z-index: 20;
-  opacity: 0.18;
+  opacity: 0.12;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  mix-blend-mode: multiply;
+  mix-blend-mode: overlay;
   transform: scale(var(--canvas-zoom));
   transform-origin: center;
 }
@@ -339,9 +343,9 @@ canvas {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.color-chip.active {
-  transform: scale(1.1);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+.color-chip {
+  background-color: transparent;
+
 }
 
 .main-btn {
