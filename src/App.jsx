@@ -78,9 +78,7 @@ export default function App() {
     let resizeObserver;
     let allowLayering = true;
     let lastFrameTime = performance.now();
-    let guidePath = [];
-    let guideActive = false;
-    let lastGuideTime = 0;
+    let guidePoints = [];
     const ink = {
       x: 0,
       y: 0,
@@ -122,9 +120,10 @@ export default function App() {
       if (prevWidth > 0 && prevHeight > 0) {
         const scaleX = width / prevWidth;
         const scaleY = height / prevHeight;
-        guidePath = guidePath.map((point) => ({
+        guidePoints = guidePoints.map((point) => ({
           x: point.x * scaleX,
-          y: point.y * scaleY
+          y: point.y * scaleY,
+          t: point.t
         }));
         ink.x *= scaleX;
         ink.y *= scaleY;
@@ -142,45 +141,19 @@ export default function App() {
 
     const onPointerDown = (event) => {
       if (!canvasWrap) return;
-      guidePath = [];
-      guideActive = true;
-      lastGuideTime = performance.now();
       const point = getPointerPos(event);
-      guidePath.push(point);
-      if (canvasWrap.setPointerCapture) {
-        canvasWrap.setPointerCapture(event.pointerId);
+      guidePoints.push({ ...point, t: performance.now() });
+      if (guidePoints.length > 12) {
+        guidePoints = guidePoints.slice(guidePoints.length - 12);
       }
       event.preventDefault();
     };
 
-    const onPointerMove = (event) => {
-      if (!guideActive) return;
-      lastGuideTime = performance.now();
-      const point = getPointerPos(event);
-      const last = guidePath[guidePath.length - 1];
-      if (!last) {
-        guidePath.push(point);
-        return;
-      }
-      const distance = Math.hypot(point.x - last.x, point.y - last.y);
-      if (distance > 4 * CANVAS_SCALE) {
-        guidePath.push(point);
-      }
-    };
-
-    const onPointerUp = (event) => {
-      if (!guideActive) return;
-      guideActive = false;
-      if (canvasWrap.releasePointerCapture) {
-        canvasWrap.releasePointerCapture(event.pointerId);
-      }
-    };
-
-    const attractToGuide = (x, y, strength) => {
-      if (guidePath.length < 2 || strength <= 0) return { ax: 0, ay: 0 };
+    const attractToPoints = (x, y, strength) => {
+      if (guidePoints.length === 0 || strength <= 0) return { ax: 0, ay: 0 };
       let closest = null;
       let minDist = Infinity;
-      for (const point of guidePath) {
+      for (const point of guidePoints) {
         const distance = Math.hypot(point.x - x, point.y - y);
         if (distance < minDist) {
           minDist = distance;
@@ -188,13 +161,15 @@ export default function App() {
         }
       }
       if (!closest) return { ax: 0, ay: 0 };
+      const age = performance.now() - closest.t;
+      const ageDecay = clamp(1 - age / 10000, 0, 1);
       const dx = closest.x - x;
       const dy = closest.y - y;
       const dist = Math.hypot(dx, dy) || 1;
       const falloff = 1 / (1 + dist * 0.02);
       return {
-        ax: (dx / dist) * strength * falloff,
-        ay: (dy / dist) * strength * falloff
+        ax: (dx / dist) * strength * falloff * ageDecay,
+        ay: (dy / dist) * strength * falloff * ageDecay
       };
     };
 
@@ -728,9 +703,8 @@ export default function App() {
       ink.vx *= 0.92;
       ink.vy *= 0.92;
 
-      const guideDecay = clamp(1 - (performance.now() - lastGuideTime) / 8000, 0, 1);
-      const guideStrength = guidePath.length > 1 ? (0.06 + bands.low * 0.18) * guideDecay : 0;
-      const guided = attractToGuide(ink.x, ink.y, guideStrength);
+      const guideStrength = guidePoints.length > 0 ? 0.05 + bands.low * 0.16 : 0;
+      const guided = attractToPoints(ink.x, ink.y, guideStrength);
       ink.vx += guided.ax;
       ink.vy += guided.ay;
 
@@ -901,10 +875,6 @@ export default function App() {
     saveVideoBtn.disabled = true;
     resetVoiceState();
     canvasWrap.addEventListener("pointerdown", onPointerDown);
-    canvasWrap.addEventListener("pointermove", onPointerMove);
-    canvasWrap.addEventListener("pointerup", onPointerUp);
-    canvasWrap.addEventListener("pointercancel", onPointerUp);
-    canvasWrap.addEventListener("pointerleave", onPointerUp);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -924,10 +894,6 @@ export default function App() {
       stopBtn.removeEventListener("click", onStop);
       window.removeEventListener("resize", resizeCanvas);
       canvasWrap.removeEventListener("pointerdown", onPointerDown);
-      canvasWrap.removeEventListener("pointermove", onPointerMove);
-      canvasWrap.removeEventListener("pointerup", onPointerUp);
-      canvasWrap.removeEventListener("pointercancel", onPointerUp);
-      canvasWrap.removeEventListener("pointerleave", onPointerUp);
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, []);
