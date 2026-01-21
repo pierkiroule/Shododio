@@ -477,6 +477,12 @@ canvas {
   gap: 12px;
 }
 
+.gallery-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .gallery-hint {
   font-size: 0.65rem;
   color: rgba(13, 13, 13, 0.6);

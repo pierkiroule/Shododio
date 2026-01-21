@@ -48,6 +48,7 @@ export default function App() {
   const galleryActionsRef = useRef({});
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   const updateCycles = useCallback((updater) => {
     setCycles((prev) => {
@@ -1592,133 +1593,146 @@ export default function App() {
             </label>
           </div>
         </div>
-        <div className="gallery-area">
+        <div className={`gallery-area ${galleryOpen ? "open" : ""}`}>
           <div className="gallery-header">
             <div className="control-label">Galerie éphémère</div>
-            <button
-              className="chip-btn"
-              type="button"
-              onClick={() => galleryActionsRef.current.clearGallery?.()}
-            >
-              Vider
-            </button>
+            <div className="gallery-header-actions">
+              <button
+                className="chip-btn"
+                type="button"
+                onClick={() => setGalleryOpen((prev) => !prev)}
+              >
+                {galleryOpen ? "Masquer" : "Afficher"}
+              </button>
+              <button
+                className="chip-btn"
+                type="button"
+                onClick={() => galleryActionsRef.current.clearGallery?.()}
+              >
+                Vider
+              </button>
+            </div>
           </div>
-          <p className="gallery-hint">
-            Préviews AV générées après chaque cycle. Sélectionnez pour exporter (max 5 cycles).
-          </p>
-          <div className="gallery-grid">
-            {cycles.length === 0 ? (
-              <div className="gallery-empty">Aucun cycle enregistré pour l’instant.</div>
-            ) : (
-              cycles.map((cycle) => (
-                <div key={cycle.id} className="gallery-card">
-                  {playingId === cycle.id ? (
-                    <video
-                      ref={(el) => {
-                        if (el) videoRefs.current[cycle.id] = el;
-                      }}
-                      src={cycle.preview.avURL}
-                      className="gallery-media"
-                      controls
-                      playsInline
-                    />
-                  ) : (
-                    <img className="gallery-media" src={cycle.preview.imageURL} alt={`Cycle ${cycle.id}`} />
-                  )}
-                  <div className="gallery-actions-row">
-                    <button className="chip-btn" type="button" onClick={() => handlePlayPreview(cycle.id)}>
-                      ▶︎ Lire cycle AV
-                    </button>
-                    <label className="gallery-select">
-                      <input
-                        type="checkbox"
-                        checked={cycle.selected}
-                        onChange={(event) => galleryActionsRef.current.updateCycleSelection?.(cycle.id, event.target.checked)}
-                      />
-                      Sélectionner
-                    </label>
-                  </div>
-                  <div className="gallery-actions-row">
-                    <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportImageHD?.(cycle)}>
-                      Image HD
-                    </button>
-                    <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportCycleAV?.(cycle)}>
-                      AV HD
-                    </button>
-                    <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.deleteCycle?.(cycle.id)}>
-                      Supprimer
-                    </button>
-                  </div>
+          {galleryOpen ? (
+            <>
+              <p className="gallery-hint">
+                Préviews AV générées après chaque cycle. Sélectionnez pour exporter (max 5 cycles).
+              </p>
+              <div className="gallery-grid">
+                {cycles.length === 0 ? (
+                  <div className="gallery-empty">Aucun cycle enregistré pour l’instant.</div>
+                ) : (
+                  cycles.map((cycle) => (
+                    <div key={cycle.id} className="gallery-card">
+                      {playingId === cycle.id ? (
+                        <video
+                          ref={(el) => {
+                            if (el) videoRefs.current[cycle.id] = el;
+                          }}
+                          src={cycle.preview.avURL}
+                          className="gallery-media"
+                          controls
+                          playsInline
+                        />
+                      ) : (
+                        <img className="gallery-media" src={cycle.preview.imageURL} alt={`Cycle ${cycle.id}`} />
+                      )}
+                      <div className="gallery-actions-row">
+                        <button className="chip-btn" type="button" onClick={() => handlePlayPreview(cycle.id)}>
+                          ▶︎ Lire cycle AV
+                        </button>
+                        <label className="gallery-select">
+                          <input
+                            type="checkbox"
+                            checked={cycle.selected}
+                            onChange={(event) => galleryActionsRef.current.updateCycleSelection?.(cycle.id, event.target.checked)}
+                          />
+                          Sélectionner
+                        </label>
+                      </div>
+                      <div className="gallery-actions-row">
+                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportImageHD?.(cycle)}>
+                          Image HD
+                        </button>
+                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportCycleAV?.(cycle)}>
+                          AV HD
+                        </button>
+                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.deleteCycle?.(cycle.id)}>
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="gallery-export">
+                <div className="gallery-export-row">
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
+                  >
+                    Images HD sélectionnées
+                  </button>
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
+                  >
+                    Image globale
+                  </button>
                 </div>
-              ))
-            )}
-          </div>
-          <div className="gallery-export">
-            <div className="gallery-export-row">
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
-              >
-                Images HD sélectionnées
-              </button>
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
-              >
-                Image globale
-              </button>
-            </div>
-            <div className="gallery-export-row">
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
-              >
-                AV cycles
-              </button>
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
-              >
-                AV groupé
-              </button>
-            </div>
-            <div className="gallery-export-row">
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
-              >
-                GIF stop-motion
-              </button>
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
-              >
-                GIF reverse
-              </button>
-            </div>
-            <div className="gallery-export-row">
-              <button
-                className="chip-btn"
-                type="button"
-                disabled={!selectedCycles.length}
-                onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
-              >
-                Export ZIP groupé
-              </button>
-            </div>
-          </div>
+                <div className="gallery-export-row">
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
+                  >
+                    AV cycles
+                  </button>
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
+                  >
+                    AV groupé
+                  </button>
+                </div>
+                <div className="gallery-export-row">
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
+                  >
+                    GIF stop-motion
+                  </button>
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
+                  >
+                    GIF reverse
+                  </button>
+                </div>
+                <div className="gallery-export-row">
+                  <button
+                    className="chip-btn"
+                    type="button"
+                    disabled={!selectedCycles.length}
+                    onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
+                  >
+                    Export ZIP groupé
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
