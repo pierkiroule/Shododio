@@ -46,11 +46,14 @@ export default function App() {
   const galleryActionsRef = useRef({});
   const toolbarRef = useRef(null);
   const toolbarHandleRef = useRef(null);
+  const toolsAreaRef = useRef(null);
+  const toolsAreaHandleRef = useRef(null);
   const [cycles, setCycles] = useState([]);
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
+  const [bottomToolsCollapsed, setBottomToolsCollapsed] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(true);
   const [galleryExpanded, setGalleryExpanded] = useState(false);
   useEffect(() => {
@@ -1436,9 +1439,11 @@ export default function App() {
     };
 
     const cleanupToolbarDrag = setupDraggable(toolbarRef.current, toolbarHandleRef.current);
+    const cleanupBottomToolsDrag = setupDraggable(toolsAreaRef.current, toolsAreaHandleRef.current);
 
     return () => {
       cleanupToolbarDrag();
+      cleanupBottomToolsDrag();
       cleanupSize();
       cleanupOpacity();
       cleanupLayering();
@@ -1549,43 +1554,59 @@ export default function App() {
         </div>
       </div>
 
-      <div className="tools-area">
-        <div className="accordion">
-          <section className={`accordion-item ${advancedOpen ? "open" : ""}`}>
-            <button
-              className="accordion-trigger"
-              type="button"
-              onClick={() => setAdvancedOpen((prev) => !prev)}
-            >
-              Réglages avancés
-              <span className="accordion-indicator">{advancedOpen ? "−" : "+"}</span>
-            </button>
-            <div className="accordion-panel">
-              <div className="minimal-controls">
-                <div className="control-block slider-block">
-                  <div className="control-label">Cycles</div>
-                  <label className="size-row toggle-row">
-                    <input id="layering-toggle" type="checkbox" defaultChecked />
-                    <span id="layering-value" className="size-value">Superposer</span>
-                  </label>
+      <div
+        ref={toolsAreaRef}
+        className={`tools-area floating-tools ${bottomToolsCollapsed ? "collapsed" : ""}`}
+      >
+        <div ref={toolsAreaHandleRef} className="tools-area-handle">
+          <span>Menus</span>
+          <button
+            className="chip-btn ghost"
+            type="button"
+            onClick={() => setBottomToolsCollapsed((prev) => !prev)}
+            aria-label={bottomToolsCollapsed ? "Ouvrir le menu" : "Réduire le menu"}
+          >
+            {bottomToolsCollapsed ? "Ouvrir" : "Réduire"}
+          </button>
+        </div>
+        <div className="tools-area-body">
+          <div className="accordion">
+            <section className={`accordion-item ${advancedOpen ? "open" : ""}`}>
+              <button
+                className="accordion-trigger"
+                type="button"
+                onClick={() => setAdvancedOpen((prev) => !prev)}
+              >
+                Réglages avancés
+                <span className="accordion-indicator">{advancedOpen ? "−" : "+"}</span>
+              </button>
+              <div className="accordion-panel">
+                <div className="minimal-controls">
+                  <div className="control-block slider-block">
+                    <div className="control-label">Cycles</div>
+                    <label className="size-row toggle-row">
+                      <input id="layering-toggle" type="checkbox" defaultChecked />
+                      <span id="layering-value" className="size-value">Superposer</span>
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
+          <button
+            className="chip-btn gallery-launch"
+            type="button"
+            onClick={() => {
+              setGalleryOpen((prev) => {
+                const next = !prev;
+                if (next) setGalleryExpanded(false);
+                return next;
+              });
+            }}
+          >
+            Galerie éphémère
+          </button>
         </div>
-        <button
-          className="chip-btn gallery-launch"
-          type="button"
-          onClick={() => {
-            setGalleryOpen((prev) => {
-              const next = !prev;
-              if (next) setGalleryExpanded(false);
-              return next;
-            });
-          }}
-        >
-          Galerie éphémère
-        </button>
       </div>
 
       {galleryOpen ? (

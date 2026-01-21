@@ -38,7 +38,7 @@ body {
 }
 
 .canvas-area {
-  flex: 0 0 65%;
+  flex: 1;
   position: relative;
   overflow: hidden;
   background: var(--bg);
@@ -243,6 +243,79 @@ canvas {
   flex: 0 0 35%;
   overflow-y: auto;
   align-items: center;
+}
+
+.floating-tools {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, 86vw);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  flex: initial;
+  overflow: hidden;
+  z-index: 260;
+  pointer-events: auto;
+}
+
+.tools-area-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.55rem;
+  color: rgba(13, 13, 13, 0.7);
+  cursor: grab;
+  touch-action: none;
+}
+
+.tools-area-handle:active {
+  cursor: grabbing;
+}
+
+.tools-area-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.floating-tools.collapsed {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.floating-tools.collapsed .tools-area-handle {
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+}
+
+.floating-tools.collapsed .tools-area-handle > span,
+.floating-tools.collapsed .tools-area-handle button {
+  display: none;
+}
+
+.floating-tools.collapsed::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(13, 13, 13, 0.45);
+}
+
+.floating-tools.collapsed .tools-area-body {
+  display: none;
 }
 
 .minimal-controls {
