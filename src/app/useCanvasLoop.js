@@ -115,13 +115,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       const wetnessScale = 0.35 + waterRatio * 1.4;
       const grainScale = 1 - waterRatio * 0.35;
       const jitterScale = 0.8 + waterRatio * 0.4;
+      const sizeScale = Math.max(0.35, brushSizeScale);
       return {
         ...activeBrush,
-        baseSize: activeBrush.baseSize * brushSizeScale,
+        baseSize: activeBrush.baseSize * sizeScale,
         flow: clamp(activeBrush.flow * flowScale, 0.05, 2),
         wetness: clamp(activeBrush.wetness * wetnessScale, 0.05, 2.5),
         grain: clamp(activeBrush.grain * grainScale, 0, 1),
-        jitter: activeBrush.jitter * jitterScale
+        jitter: activeBrush.jitter * jitterScale * (0.75 + sizeScale * 0.35),
+        bristles: Math.round(activeBrush.bristles * (0.5 + sizeScale * 0.7)),
+        spread: activeBrush.spread * (0.6 + sizeScale * 0.9)
       };
     };
 
