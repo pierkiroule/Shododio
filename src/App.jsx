@@ -1597,22 +1597,6 @@ export default function App() {
         <div className={`gallery-area ${galleryOpen ? "open" : ""}`}>
           <div className="gallery-header">
             <div className="control-label">Galerie éphémère</div>
-            <div className="gallery-header-actions">
-              <button
-                className="chip-btn"
-                type="button"
-                onClick={() => setGalleryOpen((prev) => !prev)}
-              >
-                {galleryOpen ? "Masquer" : "Afficher"}
-              </button>
-              <button
-                className="chip-btn"
-                type="button"
-                onClick={() => galleryActionsRef.current.clearGallery?.()}
-              >
-                Vider
-              </button>
-            </div>
           </div>
           {galleryOpen ? (
             <>
@@ -1669,13 +1653,6 @@ export default function App() {
               <div className="gallery-export">
                 <div className="gallery-export-header">
                   <div className="control-label">Exports</div>
-                  <button
-                    className="chip-btn"
-                    type="button"
-                    onClick={() => setGalleryExportOpen((prev) => !prev)}
-                  >
-                    {galleryExportOpen ? "Masquer" : "Afficher"}
-                  </button>
                 </div>
                 {galleryExportOpen ? (
                   <>
@@ -1748,6 +1725,30 @@ export default function App() {
               </div>
             </>
           ) : null}
+        </div>
+        <div className="bottom-menu">
+          <button
+            className={`chip-btn ${galleryOpen ? "active" : ""}`}
+            type="button"
+            onClick={() => setGalleryOpen((prev) => !prev)}
+          >
+            {galleryOpen ? "Masquer galerie" : "Afficher galerie"}
+          </button>
+          <button
+            className={`chip-btn ${galleryExportOpen ? "active" : ""}`}
+            type="button"
+            onClick={() => setGalleryExportOpen((prev) => !prev)}
+            disabled={!galleryOpen}
+          >
+            {galleryExportOpen ? "Masquer exports" : "Afficher exports"}
+          </button>
+          <button
+            className="chip-btn"
+            type="button"
+            onClick={() => galleryActionsRef.current.clearGallery?.()}
+          >
+            Vider galerie
+          </button>
         </div>
       </div>
     </div>

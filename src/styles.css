@@ -473,14 +473,8 @@ canvas {
 .gallery-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
-}
-
-.gallery-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .gallery-hint {
@@ -555,8 +549,23 @@ canvas {
 .gallery-export-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
+}
+
+.bottom-menu {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.bottom-menu .chip-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .gallery-export-row {
