@@ -50,6 +50,7 @@ export default function App() {
   const [playingId, setPlayingId] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryExportOpen, setGalleryExportOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(true);
 
   const updateCycles = useCallback((updater) => {
     setCycles((prev) => {
@@ -110,7 +111,7 @@ export default function App() {
     const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
-    const timerContainer = document.getElementById("timer-container");
+    const audioMeter = document.getElementById("audio-meter");
     const specViz = document.getElementById("spectrum-viz");
     const exportToggle = document.getElementById("export-toggle");
     const exportMenu = document.getElementById("export-menu");
@@ -1318,8 +1319,8 @@ export default function App() {
       recDot.classList.add("active");
       mainBtn.style.display = "none";
       stopBtn.style.display = "inline-flex";
-      timerContainer.style.opacity = 1;
-      specViz.style.opacity = 1;
+      if (audioMeter) audioMeter.classList.add("active");
+      if (specViz) specViz.style.opacity = 1;
       statusText.innerText = "Voix en peinture...";
 
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
@@ -1336,7 +1337,7 @@ export default function App() {
         mediaRecorder.stop();
       }
 
-      timerContainer.style.opacity = 0;
+      if (audioMeter) audioMeter.classList.remove("active");
       mainBtn.innerText = "Nouveau cycle";
       mainBtn.style.display = "block";
       stopBtn.style.display = "none";
@@ -1358,7 +1359,7 @@ export default function App() {
       mainBtn.style.display = "block";
       stopBtn.style.display = "none";
 
-      timerContainer.style.opacity = 0;
+      if (audioMeter) audioMeter.classList.remove("active");
       updateCycleStatus();
       recDot.classList.remove("active");
       exportMenu.classList.remove("active");
@@ -1368,10 +1369,6 @@ export default function App() {
       if (phase === "DRAWING") {
         const elapsed = Date.now() - startTime;
         remainingTime = Math.max(0, timeLimit - elapsed);
-        const ratio = remainingTime / timeLimit;
-
-        document.getElementById("timer-display").innerText = (remainingTime / 1000).toFixed(1);
-        document.getElementById("timer-bar").style.transform = `scaleX(${ratio})`;
 
         paintFromVoice(performance.now());
 
@@ -1500,6 +1497,23 @@ export default function App() {
     setPlayingId((prev) => (prev === cycleId ? null : cycleId));
   };
 
+  const handleToggleTools = () => {
+    setToolsOpen((prev) => !prev);
+  };
+
+  const handleToggleGallery = () => {
+    setGalleryOpen((prev) => {
+      const next = !prev;
+      if (!next) setGalleryExportOpen(false);
+      return next;
+    });
+  };
+
+  const handleToggleExports = () => {
+    if (!galleryOpen) return;
+    setGalleryExportOpen((prev) => !prev);
+  };
+
   useEffect(() => {
     if (!playingId) return;
     const video = videoRefs.current[playingId];
@@ -1532,9 +1546,7 @@ export default function App() {
               <div id="rec-dot"></div>
               <span id="status-text">Prêt à écouter</span>
             </div>
-            <div id="timer-container">
-              <div id="timer-display">10.0</div>
-              <div id="timer-bar-bg"><div id="timer-bar"></div></div>
+            <div id="audio-meter" className="audio-meter">
               <div id="spectrum-viz">
                 <div id="spec-low" className="spec-bar"></div>
                 <div id="spec-mid" className="spec-bar"></div>
@@ -1561,199 +1573,202 @@ export default function App() {
       </div>
 
       <div className="tools-area">
-        <div className="minimal-controls">
-          <div className="control-block">
-            <div className="control-label">Pinceaux</div>
-            <div id="brush-options" className="option-row compact"></div>
-          </div>
-          <div className="control-block">
-            <div className="control-label">Encres</div>
-            <div id="color-options" className="option-row compact"></div>
-          </div>
-          <div className="control-block slider-block">
-            <div className="control-label">Taille</div>
-            <div className="size-row">
-              <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
-              <span id="size-value" className="size-value">100%</span>
-            </div>
-          </div>
-          <div className="control-block slider-block">
-            <div className="control-label">Opacité</div>
-            <div className="size-row">
-              <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
-              <span id="opacity-value" className="size-value">85%</span>
-            </div>
-          </div>
-          <div className="control-block slider-block">
-            <div className="control-label">Blur FX</div>
-            <div className="size-row">
-              <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
-              <span id="blur-value" className="size-value">0.0px</span>
-            </div>
-          </div>
-          <div className="control-block slider-block">
-            <div className="control-label">Cycles</div>
-            <label className="size-row toggle-row">
-              <input id="layering-toggle" type="checkbox" defaultChecked />
-              <span id="layering-value" className="size-value">Superposer</span>
-            </label>
-          </div>
-        </div>
-        <div className={`gallery-area ${galleryOpen ? "open" : ""}`}>
-          <div className="gallery-header">
-            <div className="control-label">Galerie éphémère</div>
-          </div>
-          {galleryOpen ? (
-            <>
-              <p className="gallery-hint">
-                Préviews AV générées après chaque cycle. Sélectionnez pour exporter (max 5 cycles).
-              </p>
-              <div className="gallery-grid">
-                {cycles.length === 0 ? (
-                  <div className="gallery-empty">Aucun cycle enregistré pour l’instant.</div>
-                ) : (
-                  cycles.map((cycle) => (
-                    <div key={cycle.id} className="gallery-card">
-                      {playingId === cycle.id ? (
-                        <video
-                          ref={(el) => {
-                            if (el) videoRefs.current[cycle.id] = el;
-                          }}
-                          src={cycle.preview.avURL}
-                          className="gallery-media"
-                          controls
-                          playsInline
-                        />
-                      ) : (
-                        <img className="gallery-media" src={cycle.preview.imageURL} alt={`Cycle ${cycle.id}`} />
-                      )}
-                      <div className="gallery-actions-row">
-                        <button className="chip-btn" type="button" onClick={() => handlePlayPreview(cycle.id)}>
-                          ▶︎ Lire cycle AV
-                        </button>
-                        <label className="gallery-select">
-                          <input
-                            type="checkbox"
-                            checked={cycle.selected}
-                            onChange={(event) => galleryActionsRef.current.updateCycleSelection?.(cycle.id, event.target.checked)}
-                          />
-                          Sélectionner
-                        </label>
-                      </div>
-                      <div className="gallery-actions-row">
-                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportImageHD?.(cycle)}>
-                          Image HD
-                        </button>
-                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportCycleAV?.(cycle)}>
-                          AV HD
-                        </button>
-                        <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.deleteCycle?.(cycle.id)}>
-                          Supprimer
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="gallery-export">
-                <div className="gallery-export-header">
-                  <div className="control-label">Exports</div>
+        <div className="accordion">
+          <section className={`accordion-item ${toolsOpen ? "open" : ""}`}>
+            <button className="accordion-trigger" type="button" onClick={handleToggleTools}>
+              Outils du rituel
+              <span className="accordion-indicator">{toolsOpen ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
+              <div className="minimal-controls">
+                <div className="control-block">
+                  <div className="control-label">Pinceaux</div>
+                  <div id="brush-options" className="option-row compact"></div>
                 </div>
-                {galleryExportOpen ? (
-                  <>
-                    <div className="gallery-export-row">
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
-                      >
-                        Images HD sélectionnées
-                      </button>
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
-                      >
-                        Image globale
-                      </button>
-                    </div>
-                    <div className="gallery-export-row">
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
-                      >
-                        AV cycles
-                      </button>
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
-                      >
-                        AV groupé
-                      </button>
-                    </div>
-                    <div className="gallery-export-row">
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
-                      >
-                        GIF stop-motion
-                      </button>
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
-                      >
-                        GIF reverse
-                      </button>
-                    </div>
-                    <div className="gallery-export-row">
-                      <button
-                        className="chip-btn"
-                        type="button"
-                        disabled={!selectedCycles.length}
-                        onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
-                      >
-                        Export ZIP groupé
-                      </button>
-                    </div>
-                  </>
-                ) : null}
+                <div className="control-block">
+                  <div className="control-label">Encres</div>
+                  <div id="color-options" className="option-row compact"></div>
+                </div>
+                <div className="control-block slider-block">
+                  <div className="control-label">Taille</div>
+                  <div className="size-row">
+                    <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
+                    <span id="size-value" className="size-value">100%</span>
+                  </div>
+                </div>
+                <div className="control-block slider-block">
+                  <div className="control-label">Opacité</div>
+                  <div className="size-row">
+                    <input id="opacity-range" type="range" min="0.05" max="1.4" step="0.05" defaultValue="0.85" />
+                    <span id="opacity-value" className="size-value">85%</span>
+                  </div>
+                </div>
+                <div className="control-block slider-block">
+                  <div className="control-label">Blur FX</div>
+                  <div className="size-row">
+                    <input id="blur-range" type="range" min="0" max="12" step="0.5" defaultValue="0" />
+                    <span id="blur-value" className="size-value">0.0px</span>
+                  </div>
+                </div>
+                <div className="control-block slider-block">
+                  <div className="control-label">Cycles</div>
+                  <label className="size-row toggle-row">
+                    <input id="layering-toggle" type="checkbox" defaultChecked />
+                    <span id="layering-value" className="size-value">Superposer</span>
+                  </label>
+                </div>
               </div>
-            </>
-          ) : null}
-        </div>
-        <div className="bottom-menu">
-          <button
-            className={`chip-btn ${galleryOpen ? "active" : ""}`}
-            type="button"
-            onClick={() => setGalleryOpen((prev) => !prev)}
-          >
-            {galleryOpen ? "Masquer galerie" : "Afficher galerie"}
-          </button>
-          <button
-            className={`chip-btn ${galleryExportOpen ? "active" : ""}`}
-            type="button"
-            onClick={() => setGalleryExportOpen((prev) => !prev)}
-            disabled={!galleryOpen}
-          >
-            {galleryExportOpen ? "Masquer exports" : "Afficher exports"}
-          </button>
-          <button
-            className="chip-btn"
-            type="button"
-            onClick={() => galleryActionsRef.current.clearGallery?.()}
-          >
-            Vider galerie
-          </button>
+            </div>
+          </section>
+
+          <section className={`accordion-item ${galleryOpen ? "open" : ""}`}>
+            <button className="accordion-trigger" type="button" onClick={handleToggleGallery}>
+              Galerie éphémère
+              <span className="accordion-indicator">{galleryOpen ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
+              {galleryOpen ? (
+                <>
+                  <p className="gallery-hint">
+                    Préviews AV générées après chaque cycle. Sélectionnez pour exporter (max 5 cycles).
+                  </p>
+                  <div className="gallery-grid">
+                    {cycles.length === 0 ? (
+                      <div className="gallery-empty">Aucun cycle enregistré pour l’instant.</div>
+                    ) : (
+                      cycles.map((cycle) => (
+                        <div key={cycle.id} className="gallery-card">
+                          {playingId === cycle.id ? (
+                            <video
+                              ref={(el) => {
+                                if (el) videoRefs.current[cycle.id] = el;
+                              }}
+                              src={cycle.preview.avURL}
+                              className="gallery-media"
+                              controls
+                              playsInline
+                            />
+                          ) : (
+                            <img className="gallery-media" src={cycle.preview.imageURL} alt={`Cycle ${cycle.id}`} />
+                          )}
+                          <div className="gallery-actions-row">
+                            <button className="chip-btn" type="button" onClick={() => handlePlayPreview(cycle.id)}>
+                              ▶︎ Lire cycle AV
+                            </button>
+                            <label className="gallery-select">
+                              <input
+                                type="checkbox"
+                                checked={cycle.selected}
+                                onChange={(event) => galleryActionsRef.current.updateCycleSelection?.(cycle.id, event.target.checked)}
+                              />
+                              Sélectionner
+                            </label>
+                          </div>
+                          <div className="gallery-actions-row">
+                            <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportImageHD?.(cycle)}>
+                              Image HD
+                            </button>
+                            <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.exportCycleAV?.(cycle)}>
+                              AV HD
+                            </button>
+                            <button className="chip-btn" type="button" onClick={() => galleryActionsRef.current.deleteCycle?.(cycle.id)}>
+                              Supprimer
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="gallery-actions">
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      onClick={() => galleryActionsRef.current.clearGallery?.()}
+                    >
+                      Vider galerie
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </section>
+
+          <section className={`accordion-item ${galleryExportOpen ? "open" : ""}`}>
+            <button className="accordion-trigger" type="button" onClick={handleToggleExports} disabled={!galleryOpen}>
+              Exports &amp; livrables
+              <span className="accordion-indicator">{galleryExportOpen ? "−" : "+"}</span>
+            </button>
+            <div className="accordion-panel">
+              {galleryExportOpen ? (
+                <div className="gallery-export">
+                  <div className="gallery-export-row">
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportImageHD?.(cycle))}
+                    >
+                      Images HD sélectionnées
+                    </button>
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => galleryActionsRef.current.exportGlobalImage?.(selectedCycles)}
+                    >
+                      Image globale
+                    </button>
+                  </div>
+                  <div className="gallery-export-row">
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => selectedCycles.forEach((cycle) => galleryActionsRef.current.exportCycleAV?.(cycle))}
+                    >
+                      AV cycles
+                    </button>
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => galleryActionsRef.current.exportGroupedAV?.(selectedCycles)}
+                    >
+                      AV groupé
+                    </button>
+                  </div>
+                  <div className="gallery-export-row">
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, false)}
+                    >
+                      GIF stop-motion
+                    </button>
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => galleryActionsRef.current.exportStopMotionGIF?.(selectedCycles, true)}
+                    >
+                      GIF reverse
+                    </button>
+                  </div>
+                  <div className="gallery-export-row">
+                    <button
+                      className="chip-btn"
+                      type="button"
+                      disabled={!selectedCycles.length}
+                      onClick={() => galleryActionsRef.current.exportZipBundle?.(selectedCycles)}
+                    >
+                      Export ZIP groupé
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
         </div>
       </div>
     </div>
