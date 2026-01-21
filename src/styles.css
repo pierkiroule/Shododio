@@ -469,6 +469,119 @@ canvas {
   cursor: not-allowed;
 }
 
+.gallery-area {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.gallery-hint {
+  font-size: 0.65rem;
+  color: rgba(13, 13, 13, 0.6);
+  margin: 0;
+  text-align: center;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.gallery-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gallery-media {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--bg);
+}
+
+.gallery-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.gallery-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(13, 13, 13, 0.7);
+}
+
+.gallery-select input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
+}
+
+.gallery-empty {
+  text-align: center;
+  font-size: 0.65rem;
+  color: rgba(13, 13, 13, 0.5);
+  padding: 20px;
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+}
+
+.gallery-export {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gallery-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.bottom-menu {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.bottom-menu .chip-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gallery-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
 @media (max-width: 720px) {
   .tools-area {
     padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
