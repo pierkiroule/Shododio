@@ -9,6 +9,7 @@ import { createSamplerEngine } from "../engine/SamplerEngine";
 import { createVoiceState, resetVoiceState, stepVoiceTrajectory } from "../engine/TrajectoryEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
+import { mixColor, paperRgb } from "../utils/color";
 import { clamp } from "../utils/math";
 
 export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryActionsRef }) => {
@@ -110,13 +111,33 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       });
     };
 
+    const getAdjustedBrush = () => {
+      const flowScale = 0.3 + inkFlow;
+      const wetnessScale = 0.35 + waterRatio * 1.4;
+      const grainScale = 1 - waterRatio * 0.35;
+      const jitterScale = 0.8 + waterRatio * 0.4;
+      const sizeScale = Math.max(0.35, brushSizeScale);
+      return {
+        ...activeBrush,
+        baseSize: activeBrush.baseSize * sizeScale,
+        flow: clamp(activeBrush.flow * flowScale, 0.05, 2),
+        wetness: clamp(activeBrush.wetness * wetnessScale, 0.05, 2.5),
+        grain: clamp(activeBrush.grain * grainScale, 0, 1),
+        jitter: activeBrush.jitter * jitterScale * (0.75 + sizeScale * 0.35),
+        bristles: Math.round(activeBrush.bristles * (0.5 + sizeScale * 0.7)),
+        spread: activeBrush.spread * (0.6 + sizeScale * 0.9)
+      };
+    };
+
     const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
       const { bands, energy } = audioRef.current;
       const totalVol = bands.low + bands.mid + bands.high + energy.rms;
       if (!force && totalVol < SILENCE_THRESHOLD) return;
+      const inkRgb = inkToRgb(activeInk);
+      const adjustedInk = mixColor(inkRgb, paperRgb, clamp(waterRatio * 0.45, 0, 0.65));
       drawBrush(ctxP, { x: x1, y: y1 }, { x: x2, y: y2 }, {
-        ink: inkToRgb(activeInk),
-        brush: activeBrush,
+        ink: adjustedInk,
+        brush: getAdjustedBrush(),
         drive: {
           energy: energy.rms,
           low: bands.low,
