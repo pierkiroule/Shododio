@@ -38,7 +38,7 @@ body {
 }
 
 .canvas-area {
-  flex: 0 0 80%;
+  flex: 0 0 70%;
   position: relative;
   overflow: hidden;
   background: var(--bg);
@@ -240,8 +240,9 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 0 0 20%;
+  flex: 0 0 30%;
   overflow-y: auto;
+  align-items: center;
 }
 
 .minimal-controls {
@@ -315,6 +316,11 @@ canvas {
   cursor: pointer;
   border-radius: 999px;
   transition: all 0.2s ease;
+}
+
+.chip-btn.ghost {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.15);
 }
 
 .chip-btn.active {
@@ -416,37 +422,6 @@ canvas {
   text-transform: uppercase;
 }
 
-.export-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.export-menu {
-  position: absolute;
-  bottom: 120%;
-  right: 0;
-  display: none;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 8px;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-  z-index: 10;
-}
-
-.export-menu.active {
-  display: flex;
-}
-
-.export-menu .chip-btn[disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .gallery-hint {
   font-size: 0.65rem;
   color: rgba(13, 13, 13, 0.6);
@@ -527,6 +502,7 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: min(560px, 100%);
 }
 
 .accordion-item {
@@ -574,6 +550,106 @@ canvas {
   display: flex;
   justify-content: center;
   margin-top: 8px;
+}
+
+.gallery-launch {
+  width: min(240px, 100%);
+}
+
+.floating-toolbar {
+  position: absolute;
+  top: 100px;
+  left: 16px;
+  width: min(320px, 90vw);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 120;
+}
+
+.floating-toolbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.55rem;
+  color: rgba(13, 13, 13, 0.7);
+  cursor: grab;
+}
+
+.floating-toolbar-header:active {
+  cursor: grabbing;
+}
+
+.floating-toolbar-body {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.floating-toolbar.collapsed .floating-toolbar-body {
+  display: none;
+}
+
+.gallery-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(860px, 92vw);
+  max-height: 80vh;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  display: none;
+  flex-direction: column;
+  z-index: 200;
+  pointer-events: auto;
+}
+
+.gallery-modal.open {
+  display: flex;
+}
+
+.gallery-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+  cursor: grab;
+}
+
+.gallery-modal-header:active {
+  cursor: grabbing;
+}
+
+.gallery-modal-title {
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgba(13, 13, 13, 0.7);
+}
+
+.gallery-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gallery-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 @media (max-width: 720px) {
