@@ -94,7 +94,11 @@ export default function App() {
     const exportMenu = document.getElementById("export-menu");
     const layeringToggle = document.getElementById("layering-toggle");
     const layeringValue = document.getElementById("layering-value");
-    const guideMarker = document.getElementById("guide-marker");
+    const tapState = {
+      x: 0,
+      y: 0,
+      strength: 0
+    };
 
     const clearAll = () => {
       ctxP.fillStyle = "#f4f1ea";
@@ -107,27 +111,6 @@ export default function App() {
       }
     };
 
-    const markerState = {
-      x: 0,
-      y: 0,
-      dragging: false,
-      offsetX: 0,
-      offsetY: 0,
-      halfWidth: 0,
-      halfHeight: 0
-    };
-
-    const clampMarker = (value, max) => clamp(value, 0, Math.max(0, max));
-
-    const setMarkerPosition = (x, y) => {
-      if (!guideMarker || !canvasWrap) return;
-      const rect = canvasWrap.getBoundingClientRect();
-      markerState.x = clampMarker(x, rect.width);
-      markerState.y = clampMarker(y, rect.height);
-      guideMarker.style.left = `${markerState.x}px`;
-      guideMarker.style.top = `${markerState.y}px`;
-    };
-
     const resizeCanvas = () => {
       const rect = canvasWrap.getBoundingClientRect();
       const width = Math.max(1, Math.floor(rect.width * CANVAS_SCALE));
@@ -136,41 +119,6 @@ export default function App() {
       paper.width = width;
       paper.height = height;
       clearAll();
-      if (guideMarker) {
-        setMarkerPosition(markerState.x, markerState.y);
-      }
-    };
-
-    const onMarkerDown = (event) => {
-      if (!guideMarker || !canvasWrap) return;
-      const rect = canvasWrap.getBoundingClientRect();
-      const markerRect = guideMarker.getBoundingClientRect();
-      markerState.dragging = true;
-      guideMarker.classList.add("dragging");
-      const pointerX = event.clientX - rect.left;
-      const pointerY = event.clientY - rect.top;
-      markerState.halfWidth = markerRect.width / 2;
-      markerState.halfHeight = markerRect.height / 2;
-      markerState.offsetX = event.clientX - markerRect.left;
-      markerState.offsetY = event.clientY - markerRect.top;
-      guideMarker.setPointerCapture(event.pointerId);
-    };
-
-    const onMarkerMove = (event) => {
-      if (!markerState.dragging || !guideMarker || !canvasWrap) return;
-      const rect = canvasWrap.getBoundingClientRect();
-      const pointerX = event.clientX - rect.left;
-      const pointerY = event.clientY - rect.top;
-      const nextX = pointerX - markerState.offsetX + markerState.halfWidth;
-      const nextY = pointerY - markerState.offsetY + markerState.halfHeight;
-      setMarkerPosition(nextX, nextY);
-    };
-
-    const onMarkerUp = (event) => {
-      if (!markerState.dragging || !guideMarker) return;
-      markerState.dragging = false;
-      guideMarker.classList.remove("dragging");
-      guideMarker.releasePointerCapture(event.pointerId);
     };
 
     const addSplatter = (ctx, cx, cy, intensity, baseRgb) => {
@@ -686,19 +634,12 @@ export default function App() {
     };
 
     const resetVoiceState = () => {
-      if (guideMarker && canvasWrap) {
-        const rect = canvasWrap.getBoundingClientRect();
-        const scaleX = rect.width > 0 ? paper.width / rect.width : 1;
-        const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
-        voiceState.x = clampMarker(markerState.x, rect.width) * scaleX;
-        voiceState.y = clampMarker(markerState.y, rect.height) * scaleY;
-      } else {
-        voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
-        voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
-      }
+      voiceState.x = paper.width * (0.35 + Math.random() * 0.3);
+      voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
       voiceState.angle = Math.random() * Math.PI * 2;
       voiceState.velocity = 0;
       lastFrameTime = performance.now();
+      tapState.strength = 0;
     };
 
     const paintFromVoice = (timestamp) => {
@@ -712,6 +653,17 @@ export default function App() {
 
       const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
       voiceState.angle += turnAmount;
+
+      if (tapState.strength > 0) {
+        const dxTap = tapState.x - voiceState.x;
+        const dyTap = tapState.y - voiceState.y;
+        const tapAngle = Math.atan2(dyTap, dxTap);
+        const angleDiff = Math.atan2(Math.sin(tapAngle - voiceState.angle), Math.cos(tapAngle - voiceState.angle));
+        const distance = Math.hypot(dxTap, dyTap);
+        const pull = clamp(tapState.strength * (1 - clamp(distance / (paper.width * 0.7), 0, 1)), 0, 1);
+        voiceState.angle += angleDiff * (0.08 + pull * 0.18);
+        tapState.strength = Math.max(0, tapState.strength - delta * 0.0015);
+      }
 
       const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
       const dy = Math.sin(voiceState.angle) * voiceState.velocity * (delta / 16);
@@ -866,6 +818,19 @@ export default function App() {
       }
     };
 
+    const onCanvasTap = (event) => {
+      if (!canvasWrap) return;
+      if (event.target.closest(".action-area")) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      const scaleX = rect.width > 0 ? paper.width / rect.width : 1;
+      const scaleY = rect.height > 0 ? paper.height / rect.height : 1;
+      const x = clamp(event.clientX - rect.left, 0, rect.width);
+      const y = clamp(event.clientY - rect.top, 0, rect.height);
+      tapState.x = x * scaleX;
+      tapState.y = y * scaleY;
+      tapState.strength = 1;
+    };
+
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
     saveBtn.addEventListener("click", onSave);
@@ -873,6 +838,7 @@ export default function App() {
     exportToggle.addEventListener("click", onExportToggle);
     mainBtn.addEventListener("click", onMainClick);
     stopBtn.addEventListener("click", onStop);
+    canvasWrap.addEventListener("pointerdown", onCanvasTap);
     const cleanupSize = setupBrushSizeControls();
     const cleanupOpacity = setupOpacityControls();
     const cleanupBlur = setupBlurControls();
@@ -882,14 +848,6 @@ export default function App() {
     updateCycleStatus();
     saveVideoBtn.disabled = true;
     resetVoiceState();
-    if (guideMarker && canvasWrap) {
-      const rect = canvasWrap.getBoundingClientRect();
-      setMarkerPosition(rect.width * 0.5, rect.height * 0.5);
-      guideMarker.addEventListener("pointerdown", onMarkerDown);
-      window.addEventListener("pointermove", onMarkerMove);
-      window.addEventListener("pointerup", onMarkerUp);
-      window.addEventListener("pointercancel", onMarkerUp);
-    }
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -907,13 +865,8 @@ export default function App() {
       exportToggle.removeEventListener("click", onExportToggle);
       mainBtn.removeEventListener("click", onMainClick);
       stopBtn.removeEventListener("click", onStop);
+      canvasWrap.removeEventListener("pointerdown", onCanvasTap);
       window.removeEventListener("resize", resizeCanvas);
-      if (guideMarker) {
-        guideMarker.removeEventListener("pointerdown", onMarkerDown);
-      }
-      window.removeEventListener("pointermove", onMarkerMove);
-      window.removeEventListener("pointerup", onMarkerUp);
-      window.removeEventListener("pointercancel", onMarkerUp);
       if (resizeObserver) resizeObserver.disconnect();
     };
   }, []);
@@ -929,9 +882,6 @@ export default function App() {
       <div className="canvas-area" ref={canvasWrapRef}>
         <canvas id="paper-layer" ref={canvasRef}></canvas>
         <div className="paper-texture"></div>
-        <div id="guide-marker" className="guide-marker" aria-hidden="true">
-          <div className="guide-marker__core"></div>
-        </div>
         <div id="ui-layer" className="ui-layer">
           <div className="top-ui">
             <div id="status-msg">
