@@ -80,6 +80,7 @@ export default function App() {
     let lastFrameTime = performance.now();
     let guidePath = [];
     let guideActive = false;
+    let lastGuideTime = 0;
     const ink = {
       x: 0,
       y: 0,
@@ -143,14 +144,18 @@ export default function App() {
       if (!canvasWrap) return;
       guidePath = [];
       guideActive = true;
+      lastGuideTime = performance.now();
       const point = getPointerPos(event);
       guidePath.push(point);
-      canvasWrap.setPointerCapture(event.pointerId);
+      if (canvasWrap.setPointerCapture) {
+        canvasWrap.setPointerCapture(event.pointerId);
+      }
       event.preventDefault();
     };
 
     const onPointerMove = (event) => {
       if (!guideActive) return;
+      lastGuideTime = performance.now();
       const point = getPointerPos(event);
       const last = guidePath[guidePath.length - 1];
       if (!last) {
@@ -166,11 +171,13 @@ export default function App() {
     const onPointerUp = (event) => {
       if (!guideActive) return;
       guideActive = false;
-      canvasWrap.releasePointerCapture(event.pointerId);
+      if (canvasWrap.releasePointerCapture) {
+        canvasWrap.releasePointerCapture(event.pointerId);
+      }
     };
 
     const attractToGuide = (x, y, strength) => {
-      if (guidePath.length < 2) return { x, y };
+      if (guidePath.length < 2 || strength <= 0) return { ax: 0, ay: 0 };
       let closest = null;
       let minDist = Infinity;
       for (const point of guidePath) {
@@ -180,10 +187,14 @@ export default function App() {
           closest = point;
         }
       }
-      if (!closest) return { x, y };
+      if (!closest) return { ax: 0, ay: 0 };
+      const dx = closest.x - x;
+      const dy = closest.y - y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const falloff = 1 / (1 + dist * 0.02);
       return {
-        x: x + (closest.x - x) * strength,
-        y: y + (closest.y - y) * strength
+        ax: (dx / dist) * strength * falloff,
+        ay: (dy / dist) * strength * falloff
       };
     };
 
@@ -717,9 +728,11 @@ export default function App() {
       ink.vx *= 0.92;
       ink.vy *= 0.92;
 
-      const guided = attractToGuide(ink.x, ink.y, 0.04 + bands.low * 0.12);
-      ink.vx += guided.x - ink.x;
-      ink.vy += guided.y - ink.y;
+      const guideDecay = clamp(1 - (performance.now() - lastGuideTime) / 8000, 0, 1);
+      const guideStrength = guidePath.length > 1 ? (0.06 + bands.low * 0.18) * guideDecay : 0;
+      const guided = attractToGuide(ink.x, ink.y, guideStrength);
+      ink.vx += guided.ax;
+      ink.vy += guided.ay;
 
       const prevX = ink.x;
       const prevY = ink.y;
