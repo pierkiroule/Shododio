@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const brushes = [
-  { id: "senbon", name: "Senbon", style: "rake", baseSize: 7, bristles: 18, spread: 1.25, flow: 0.75, jitter: 0.55, grain: 0.5 },
-  { id: "kumo", name: "Kumo", style: "mist", baseSize: 16, bristles: 8, spread: 1.8, flow: 0.28, jitter: 0.18, grain: 0.2 },
-  { id: "uroko", name: "Uroko", style: "scales", baseSize: 9, bristles: 10, spread: 1.7, flow: 0.55, jitter: 0.3, grain: 0.75 },
-  { id: "shuto", name: "Shuto", style: "alcohol", baseSize: 18, bristles: 6, spread: 2.4, flow: 0.5, jitter: 0.2, grain: 0.1 },
-  { id: "keisen", name: "Keisen", style: "filament", baseSize: 8, bristles: 12, spread: 1.4, flow: 0.7, jitter: 0.2, grain: 0.15 }
-];
+import { drawBrush } from "./engine/BrushEngine";
+import { brushPresets } from "./brushes/brushPresets";
 
 const inkPalette = [
   { id: "sumi", name: "Sumi Noir", value: "#14110f" },
@@ -102,7 +96,7 @@ export default function App() {
     let lastPeakTime = 0;
     let mediaRecorder;
     let recordedChunks = [];
-    let activeBrush = brushes[0];
+    let activeBrush = brushPresets[0];
     let activeInk = inkPalette[0];
     let resizeObserver;
     let allowLayering = true;
@@ -311,232 +305,17 @@ export default function App() {
       const totalVol = localBands.low + localBands.mid + localBands.high + localEnergy.rms;
       if (!drive.force && totalVol < SILENCE_THRESHOLD) return;
 
-      const dist = Math.hypot(x2 - x1, y2 - y1);
-      const steps = Math.max(1, Math.floor(dist));
-      const speed = clamp(dist / 10, 0, 1);
-      const pressure = 1.0 - speed * 0.6;
-      const whisper = localEnergy.rms < 0.18;
-      const brush = activeBrush;
-      const baseRgb = hexToRgb(activeInk.value);
-      const deepRgb = mixColor(baseRgb, { r: 0, g: 0, b: 0 }, 0.2 + inkFlow * 0.12);
-      const mistRgb = mixColor(baseRgb, paperRgb, 0.65 + waterRatio * 0.2);
-      const wateriness = clamp(0.25 + localBands.low * 0.9 + localEnergy.rms * 0.6 + waterRatio * 0.8, 0, 2);
-      const dryness = clamp(0.95 - wateriness + localBands.high * 0.35 + inkFlow * 0.2, 0.1, 1.2);
-      const fineDetail = clamp(localBands.high * 0.8 + localEnergy.peak * 0.6, 0, 1.2);
-
-      ctx.save();
-      ctx.globalCompositeOperation = "multiply";
-
-      let dx = x2 - x1;
-      let dy = y2 - y1;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      let nx = 0;
-      let ny = 0;
-      let dirX = 0;
-      let dirY = 0;
-      if (len > 0) {
-        nx = -dy / len;
-        ny = dx / len;
-        dirX = dx / len;
-        dirY = dy / len;
-      }
-
-      const sizeResponse = clamp(0.25 + brushSizeScale * 0.85, 0.25, 1.15);
-      const audioBoost = clamp(0.35 + localEnergy.rms * 0.9 + localEnergy.peak * 0.6, 0.35, 1.6);
-      const bandBoost = clamp((localBands.low + localBands.mid + localBands.high) / 1.2, 0, 1);
-      const jitterBase = (1.5 + localBands.high * 6 + localEnergy.rms * 5) * brush.jitter * audioBoost * (0.6 + sizeResponse * 0.4);
-
-      for (let i = 0; i <= steps; i += 1) {
-        const t = i / steps;
-        let cx = x1 + (x2 - x1) * t;
-        let cy = y1 + (y2 - y1) * t;
-
-        cx += (Math.random() - 0.5) * jitterBase;
-        cy += (Math.random() - 0.5) * jitterBase;
-
-        if (Math.random() < 0.12 * wateriness && len > 0) {
-          addWetTrace(ctx, cx, cy, 6 + brush.baseSize * 0.6, baseRgb, wateriness, dirX, dirY);
-        }
-
-        if (Math.random() < 0.2 * (0.4 + waterRatio)) {
-          addWaterHalo(ctx, cx, cy, 10 + brush.baseSize * 1.2, baseRgb, 0.4 + wateriness * 0.4);
-        }
-
-        if (Math.random() < 0.1 * dryness) {
-          addDryEdge(ctx, cx, cy, 6 + brush.baseSize * 0.8, deepRgb, dryness);
-        }
-
-        if (Math.random() < 0.18 * (0.4 + fineDetail)) {
-          addGranulation(ctx, cx, cy, 6 + brush.baseSize, baseRgb, 0.4 + fineDetail);
-        }
-
-        if (brush.style === "mist") {
-          const washSize = (brush.baseSize * brushSizeScale * 1.8 + localBands.low * 18) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.05 * brush.flow * inkFlow);
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, washSize, washSize * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-
-          if (Math.random() < 0.15 + bandBoost * 0.4) {
-            addStain(ctx, cx, cy, washSize * (0.8 + bandBoost), baseRgb, 0.4 + bandBoost * 0.5);
-            if (Math.random() < 0.4) {
-              addDryEdge(ctx, cx, cy, washSize * 0.9, deepRgb, 0.6 + bandBoost);
-            }
-          }
-          if (Math.random() < 0.4) {
-            addWaterHalo(ctx, cx, cy, washSize * 0.9, baseRgb, 0.5 + wateriness * 0.35);
-          }
-        }
-
-        if (brush.style === "alcohol") {
-          const washSize = (brush.baseSize * brushSizeScale * 1.7 + localBands.low * 20) * pressure * sizeResponse;
-          const dilution = clamp(0.08 + localEnergy.rms * 0.18, 0.04, 0.22);
-          ctx.save();
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.fillStyle = `rgba(0, 0, 0, ${dilution})`;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, washSize, washSize * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalCompositeOperation = "screen";
-          const haloGradient = ctx.createRadialGradient(cx, cy, washSize * 0.15, cx, cy, washSize * 0.95);
-          const coolTone = mixColor(baseRgb, { r: 140, g: 200, b: 255 }, 0.35);
-          haloGradient.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.05));
-          haloGradient.addColorStop(0.5, rgba(coolTone, 0.06 + localEnergy.rms * 0.12));
-          haloGradient.addColorStop(1, rgba(baseRgb, 0));
-          ctx.fillStyle = haloGradient;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, washSize * 1.1, washSize * 0.75, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          if (Math.random() < 0.25) {
-            addWetTrace(ctx, cx, cy, washSize * 0.65, baseRgb, 0.45 + wateriness * 0.4, dirX, dirY);
-          }
-        }
-
-        if (brush.style === "rake") {
-          const rakeWidth = (brush.baseSize * brushSizeScale * 1.1 + localBands.mid * 8) * pressure * sizeResponse;
-          const bristles = Math.max(8, Math.round(brush.bristles + localBands.high * 12));
-          const alphaBase = (0.06 + localBands.mid * 0.6 + localEnergy.rms * 0.4) * brush.flow * inkFlow;
-
-          for (let b = 0; b < bristles; b += 1) {
-            if (Math.random() < brush.grain * 0.2) continue;
-            const spread = (Math.random() - 0.5) * rakeWidth * brush.spread * 2;
-            const mx = cx + nx * spread;
-            const my = cy + ny * spread;
-            const length = (3 + Math.random() * 8 + localBands.low * 12) * sizeResponse;
-            const width = (0.4 + Math.random() * 0.6) * sizeResponse;
-            ctx.strokeStyle = rgba(deepRgb, alphaBase * (0.6 + Math.random() * 0.5));
-            ctx.lineWidth = width;
-            ctx.beginPath();
-            ctx.moveTo(mx, my);
-            ctx.lineTo(mx + dirX * length, my + dirY * length);
-            ctx.stroke();
-          }
-          if (Math.random() < 0.2 + fineDetail * 0.2) {
-            addGranulation(ctx, cx, cy, rakeWidth * 0.6, baseRgb, 0.35 + fineDetail);
-          }
-        }
-
-        if (brush.style === "scales") {
-          const layers = 1 + Math.floor(localBands.low * 3);
-          const baseSize = (brush.baseSize * brushSizeScale * 0.55 + localBands.low * 8) * pressure * sizeResponse;
-          for (let s = 0; s < layers; s += 1) {
-            const offset = (Math.random() - 0.5) * brush.spread * 10 * sizeResponse;
-            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.4;
-            drawScaleStamp(
-              ctx,
-              cx + nx * offset,
-              cy + ny * offset,
-              baseSize * (0.7 + Math.random() * 0.6),
-              angle,
-              deepRgb,
-              (0.12 + localBands.low * 0.6 + localEnergy.rms * 0.2) * brush.flow * inkFlow
-            );
-          }
-          if (Math.random() < 0.2 * dryness) {
-            addDryEdge(ctx, cx, cy, baseSize * 1.2, deepRgb, 0.6 + dryness);
-          }
-        }
-
-        if (brush.style === "filament") {
-          const filamentCount = 18 + Math.floor(localBands.high * 16);
-          const baseRadius = (brush.baseSize * brushSizeScale * 0.9 + localBands.low * 8) * (0.6 + bandBoost * 0.4);
-          const radialJitter = 1.2 + localBands.high * 4 + localEnergy.rms * 2;
-          const filamentLength = 2.5 + localBands.high * 6 + localEnergy.peak * 3;
-          const angleSeed = Math.random() * Math.PI * 2;
-          ctx.save();
-          ctx.strokeStyle = rgba(deepRgb, (0.12 + localEnergy.rms * 0.25) * brush.flow * inkFlow);
-          ctx.lineWidth = 0.25 * sizeResponse;
-          ctx.beginPath();
-          for (let f = 0; f < filamentCount; f += 1) {
-            const angle = angleSeed + (f / filamentCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
-            const radius = baseRadius + Math.sin(angle * 2) * radialJitter + (Math.random() - 0.5) * radialJitter;
-            const ax = cx + Math.cos(angle) * radius;
-            const ay = cy + Math.sin(angle) * radius;
-            const bx = cx + Math.cos(angle) * (radius + filamentLength);
-            const by = cy + Math.sin(angle) * (radius + filamentLength);
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(bx, by);
-          }
-          ctx.stroke();
-
-          const splashes = Math.random() < 0.5 ? 2 : 5;
-          for (let s = 0; s < splashes; s += 1) {
-            const scatter = (3 + localEnergy.peak * 6) * brush.spread;
-            const hx = cx + (Math.random() - 0.5) * scatter;
-            const hy = cy + (Math.random() - 0.5) * scatter;
-            const size = (0.35 + Math.random() * 0.5) * sizeResponse;
-            ctx.fillStyle = rgba(baseRgb, (0.2 + localEnergy.peak * 0.32) * inkFlow);
-            ctx.beginPath();
-            ctx.arc(hx, hy, size, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          if (Math.random() < 0.25) {
-            addWetTrace(ctx, cx, cy, baseRadius * 0.7, baseRgb, 0.35 + wateriness, dirX, dirY);
-          }
-          ctx.restore();
-        }
-
-        if (whisper && brush.style !== "mist") {
-          const hazeSize = (brush.baseSize * brushSizeScale * 0.7 + localBands.low * 6) * pressure * sizeResponse;
-          ctx.fillStyle = rgba(mistRgb, 0.03 * brush.flow * inkFlow);
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, hazeSize, hazeSize * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        const splashIntensity = Math.max(localBands.high, localEnergy.peak);
-        if (splashIntensity > 0.08) {
-          if (Math.random() < 0.25 + splashIntensity * 0.6) {
-            const scatter = (6 + splashIntensity * 24) * brush.spread;
-            const hx = cx + (Math.random() - 0.5) * scatter;
-            const hy = cy + (Math.random() - 0.5) * scatter;
-            const size = (0.4 + Math.random() * (1 + splashIntensity)) * sizeResponse;
-            const alpha = 0.32 * splashIntensity * (whisper ? 0.5 : 1) * inkFlow;
-            const splashRgb = mixColor(baseRgb, paperRgb, 0.3 + waterRatio * 0.35);
-            ctx.fillStyle = rgba(splashRgb, alpha);
-            ctx.beginPath();
-            ctx.arc(hx, hy, size, 0, Math.PI * 2);
-            ctx.fill();
-          }
-
-          if (Math.random() < 0.12 * splashIntensity) {
-            const len = 8 + 12 * splashIntensity;
-            const ang = Math.random() * Math.PI * 2;
-            drawSpark(ctx, cx, cy, len, ang, mistRgb, 0.18 * splashIntensity * inkFlow, 0.5);
-          }
-
-          if (localEnergy.peak > 0.18 && Math.random() < 0.5) {
-            addSplatter(ctx, cx, cy, localEnergy.peak, baseRgb);
-            addStain(ctx, cx, cy, 14 + localEnergy.peak * 26, baseRgb, localEnergy.peak);
-          }
-        }
-      }
-
-      ctx.restore();
+      drawBrush(ctx, { x: x1, y: y1 }, { x: x2, y: y2 }, {
+        ink: hexToRgb(activeInk.value),
+        brush: activeBrush,
+        drive: {
+          energy: localEnergy.rms,
+          low: localBands.low,
+          mid: localBands.mid,
+          high: Math.max(localBands.high, localEnergy.peak)
+        },
+        dt: drive.dt || 16
+      });
     };
 
     const updateCycleStatus = () => {
@@ -587,7 +366,7 @@ export default function App() {
       brushContainer.innerHTML = "";
       colorContainer.innerHTML = "";
 
-      brushes.forEach((brush, index) => {
+      brushPresets.forEach((brush, index) => {
         const btn = document.createElement("button");
         btn.className = "chip-btn";
         btn.textContent = brush.name;
@@ -1366,7 +1145,7 @@ export default function App() {
       const nx = voiceState.x + dx;
       const ny = voiceState.y + dy;
 
-      drawSpectralBrush(ctxP, voiceState.x, voiceState.y, nx, ny);
+      drawSpectralBrush(ctxP, voiceState.x, voiceState.y, nx, ny, { bands, energy: audioEnergy, dt: delta });
 
       voiceState.x = nx;
       voiceState.y = ny;
