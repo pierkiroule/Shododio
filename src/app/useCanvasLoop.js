@@ -9,6 +9,7 @@ import { createSamplerEngine } from "../engine/SamplerEngine";
 import { createVoiceState, resetVoiceState, stepVoiceTrajectory } from "../engine/TrajectoryEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
+import { mixColor, paperRgb } from "../utils/color";
 import { clamp } from "../utils/math";
 
 export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryActionsRef }) => {
@@ -132,8 +133,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       const { bands, energy } = audioRef.current;
       const totalVol = bands.low + bands.mid + bands.high + energy.rms;
       if (!force && totalVol < SILENCE_THRESHOLD) return;
+      const inkRgb = inkToRgb(activeInk);
+      const adjustedInk = mixColor(inkRgb, paperRgb, clamp(waterRatio * 0.45, 0, 0.65));
       drawBrush(ctxP, { x: x1, y: y1 }, { x: x2, y: y2 }, {
-        ink: inkToRgb(activeInk),
+        ink: adjustedInk,
         brush: getAdjustedBrush(),
         drive: {
           energy: energy.rms,
