@@ -348,6 +348,15 @@ canvas {
 
 }
 
+.color-chip.active {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink);
+  transform: scale(1.06);
+}
+
+.color-chip:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink);
+}
+
 .main-btn {
   padding: 12px 28px;
   border: 1px solid var(--ink);
