@@ -51,12 +51,12 @@ export const AppControls = ({
             type="button"
             onClick={() => toggleMenuSection("size")}
           >
-            Taille
+            Épaisseur
             <span className="accordion-indicator">{menuSections.size ? "−" : "+"}</span>
           </button>
           <div className="accordion-panel">
             <div className="size-row">
-              <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
+              <input id="size-range" type="range" min="0" max="4" step="0.05" defaultValue="1" />
               <span id="size-value" className="size-value">100%</span>
             </div>
           </div>
