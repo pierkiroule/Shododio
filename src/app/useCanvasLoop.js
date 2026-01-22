@@ -179,8 +179,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
         const numeric = parseFloat(value);
         const normalized = clamp(numeric, 0, 4);
         const t = normalized / 4;
-        const curved = Math.pow(t, 1.8);
-        brushSizeScale = MIN_BRUSH_SCALE + curved * 6;
+        const curved = Math.pow(t, 2.2);
+        brushSizeScale = MIN_BRUSH_SCALE + curved * 18;
         sizeValue.textContent = `${Math.round(brushSizeScale * 100)}%`;
       };
 
