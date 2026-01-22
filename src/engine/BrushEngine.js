@@ -207,7 +207,8 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
 
   const wateriness = clamp(wetness + low * 0.8 + energy * 0.6, 0, 2);
   const dryness = clamp(1.1 - wateriness + high * 0.5, 0.1, 1.3);
-  const size = baseSize * (0.6 + energy * 1.2) * (0.6 + mid * 0.6);
+  const audioDamping = 1 - clamp(energy * 0.45 + high * 0.25 + mid * 0.15, 0, 0.6);
+  const size = baseSize * (0.6 + energy * 1.2) * (0.6 + mid * 0.6) * audioDamping;
   const jitter = jitterBase * (1 + high * 4 + energy * 3) * size;
 
   const inkDeep = getInkDepth(safeInk, flow);
