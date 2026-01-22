@@ -62,7 +62,7 @@ canvas {
   height: 100%;
   transform: scale(var(--canvas-zoom));
   transform-origin: center;
-  filter: none;
+  filter: url(#ink-sharpen);
 }
 
 .paper-texture {
