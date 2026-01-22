@@ -45,40 +45,6 @@ export const AppControls = ({
           </div>
         </section>
 
-        <section className={`accordion-item ${menuSections.size ? "open" : ""}`}>
-          <button
-            className="accordion-trigger"
-            type="button"
-            onClick={() => toggleMenuSection("size")}
-          >
-            Taille
-            <span className="accordion-indicator">{menuSections.size ? "−" : "+"}</span>
-          </button>
-          <div className="accordion-panel">
-            <div className="size-row">
-              <input id="size-range" type="range" min="0" max="3" step="0.05" defaultValue="1" />
-              <span id="size-value" className="size-value">100%</span>
-            </div>
-          </div>
-        </section>
-
-        <section className={`accordion-item ${menuSections.opacity ? "open" : ""}`}>
-          <button
-            className="accordion-trigger"
-            type="button"
-            onClick={() => toggleMenuSection("opacity")}
-          >
-            Dilution
-            <span className="accordion-indicator">{menuSections.opacity ? "−" : "+"}</span>
-          </button>
-          <div className="accordion-panel">
-            <div className="size-row">
-              <input id="dilution-range" type="range" min="0" max="100" step="1" defaultValue="72" />
-              <span id="dilution-value" className="size-value">Encre 72 / Eau 28</span>
-            </div>
-          </div>
-        </section>
-
         <section className={`accordion-item ${menuSections.advanced ? "open" : ""}`}>
           <button
             className="accordion-trigger"

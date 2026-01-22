@@ -52,16 +52,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     let lastFrameTime = performance.now();
     let previewBusy = false;
     let cycleIndex = 0;
-    let brushSizeScale = 1;
-    let inkFlow = 0.72;
-    let waterRatio = 0.28;
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
     const PREVIEW_LONG_EDGE = 360;
     const PREVIEW_FPS = 20;
     const MAX_CYCLES = 5;
-    const MIN_BRUSH_SCALE = 0.05;
     const SILENCE_THRESHOLD = 0.01;
 
     const previewCanvas = document.createElement("canvas");
@@ -120,23 +116,13 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     };
 
     const getAdjustedBrush = () => {
-      const flowScale = 0.3 + inkFlow;
-      const wetnessScale = 0.35 + waterRatio * 1.4;
-      const grainScale = 1 - waterRatio * 0.35;
-      const jitterScale = 0.8 + waterRatio * 0.4;
-      const sizeScale = Math.max(0.35, brushSizeScale);
-
       const b = activeBrushRef.current;
 
       return {
         ...b,
-        baseSize: b.baseSize * sizeScale,
-        flow: clamp(b.flow * flowScale, 0.05, 2),
-        wetness: clamp(b.wetness * wetnessScale, 0.05, 2.5),
-        grain: clamp(b.grain * grainScale, 0, 1),
-        jitter: b.jitter * jitterScale * (0.75 + sizeScale * 0.35),
-        bristles: Math.round(b.bristles * (0.5 + sizeScale * 0.7)),
-        spread: b.spread * (0.6 + sizeScale * 0.9)
+        flow: clamp(b.flow, 0.05, 2),
+        wetness: clamp(b.wetness, 0.05, 2.5),
+        grain: clamp(b.grain, 0, 1)
       };
     };
 
@@ -147,7 +133,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
       // ✅ encre toujours à jour
       const inkRgb = inkToRgb(activeInkRef.current);
-      const adjustedInk = mixColor(inkRgb, paperRgb, clamp(waterRatio * 0.45, 0, 0.65));
+      const adjustedInk = mixColor(inkRgb, paperRgb, 0.2);
 
       drawBrush(
         ctxP,
@@ -169,51 +155,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const updateCycleStatus = () => {
       statusText.innerText = "Prêt à écouter";
-    };
-
-    const setupBrushSizeControls = () => {
-      const sizeRange = document.getElementById("size-range");
-      const sizeValue = document.getElementById("size-value");
-
-      const updateSizing = (value) => {
-        const numeric = parseFloat(value);
-        const normalized = clamp(numeric, 0, 3);
-        brushSizeScale = normalized === 0 ? MIN_BRUSH_SCALE : normalized;
-        sizeValue.textContent = `${Math.round(normalized * 100)}%`;
-      };
-
-      const onInput = (event) => updateSizing(event.target.value);
-      sizeRange.addEventListener("input", onInput);
-      sizeRange.addEventListener("change", onInput);
-      updateSizing(sizeRange.value);
-
-      return () => {
-        sizeRange.removeEventListener("input", onInput);
-        sizeRange.removeEventListener("change", onInput);
-      };
-    };
-
-    const setupDilutionControls = () => {
-      const dilutionRange = document.getElementById("dilution-range");
-      const dilutionValue = document.getElementById("dilution-value");
-
-      const updateDilution = (value) => {
-        const numeric = clamp(parseFloat(value), 0, 100);
-        const inkRatio = numeric / 100;
-        waterRatio = 1 - inkRatio;
-        inkFlow = 0.2 + inkRatio * 0.75;
-        dilutionValue.textContent = `Encre ${Math.round(inkRatio * 100)} / Eau ${Math.round(waterRatio * 100)}`;
-      };
-
-      const onInput = (event) => updateDilution(event.target.value);
-      dilutionRange.addEventListener("input", onInput);
-      dilutionRange.addEventListener("change", onInput);
-      updateDilution(dilutionRange.value);
-
-      return () => {
-        dilutionRange.removeEventListener("input", onInput);
-        dilutionRange.removeEventListener("change", onInput);
-      };
     };
 
     const setupControls = () => {
@@ -497,8 +438,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     mainBtn.addEventListener("click", onMainClick);
     stopBtn.addEventListener("click", onStop);
 
-    const cleanupSize = setupBrushSizeControls();
-    const cleanupOpacity = setupDilutionControls();
     const cleanupLayering = setupLayeringControl();
 
     setupControls();
@@ -523,8 +462,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     };
 
     return () => {
-      cleanupSize();
-      cleanupOpacity();
       cleanupLayering();
 
       initBtn.removeEventListener("click", onInitClick);
