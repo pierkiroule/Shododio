@@ -115,12 +115,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       });
     };
 
-    const getAdjustedBrush = () => {
+    const getAdjustedBrush = (audioIntensity = 0) => {
       const b = activeBrushRef.current;
+      const intensity = clamp(audioIntensity, 0, 1);
+      const thicknessScale = 0.6 + intensity * 1.2;
+      const flowScale = 0.7 + intensity * 0.6;
 
       return {
         ...b,
-        flow: clamp(b.flow, 0.05, 2),
+        baseSize: b.baseSize * thicknessScale,
+        flow: clamp(b.flow * flowScale, 0.05, 2),
         wetness: clamp(b.wetness, 0.05, 2.5),
         grain: clamp(b.grain, 0, 1)
       };
@@ -129,6 +133,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
       const { bands, energy } = audioRef.current;
       const totalVol = bands.low + bands.mid + bands.high + energy.rms;
+      const audioIntensity = clamp(totalVol / 1.2, 0, 1);
       if (!force && totalVol < SILENCE_THRESHOLD) return;
 
       // ✅ encre toujours à jour
@@ -141,7 +146,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
         { x: x2, y: y2 },
         {
           ink: adjustedInk,
-          brush: getAdjustedBrush(),
+          brush: getAdjustedBrush(audioIntensity),
           drive: {
             energy: energy.rms,
             low: bands.low,
