@@ -16,13 +16,17 @@ export const updateFrequencyBands = (data, bands) => {
     else high += v;
   }
 
-  const rawLow = (low / lowLimit) * 2.8;
-  const rawMid = (mid / (midLimit - lowLimit)) * 3.2;
-  const rawHigh = (high / (binCount - midLimit)) * 6.2;
+  const rawLow = (low / lowLimit) * 3;
+  const rawMid = (mid / (midLimit - lowLimit)) * 3.6;
+  const rawHigh = (high / (binCount - midLimit)) * 6.6;
 
-  bands.low += (clamp(rawLow, 0, 1) - bands.low) * 0.25;
-  bands.mid += (clamp(rawMid, 0, 1) - bands.mid) * 0.25;
-  bands.high += (clamp(rawHigh, 0, 1) - bands.high) * 0.2;
+  const shapedLow = clamp(Math.pow(rawLow, 0.85), 0, 1);
+  const shapedMid = clamp(Math.pow(rawMid, 0.8), 0, 1);
+  const shapedHigh = clamp(Math.pow(rawHigh, 0.75), 0, 1);
+
+  bands.low += (shapedLow - bands.low) * 0.35;
+  bands.mid += (shapedMid - bands.mid) * 0.35;
+  bands.high += (shapedHigh - bands.high) * 0.28;
 
   return bands;
 };
@@ -34,15 +38,15 @@ export const updateEnergy = (timeData, energy, lastPeakTimeRef) => {
     sum += v * v;
   }
   const rms = Math.sqrt(sum / timeData.length);
-  const normalized = clamp((rms - 0.015) / 0.23, 0, 1);
-  energy.rms += (normalized - energy.rms) * 0.3;
+  const normalized = clamp((rms - 0.012) / 0.2, 0, 1);
+  energy.rms += (normalized - energy.rms) * 0.36;
 
   const now = performance.now();
-  if (normalized > 0.25 && now - lastPeakTimeRef.current > 120) {
+  if (normalized > 0.22 && now - lastPeakTimeRef.current > 110) {
     energy.peak = 1;
     lastPeakTimeRef.current = now;
   }
-  energy.peak = Math.max(0, energy.peak - 0.12);
+  energy.peak = Math.max(0, energy.peak - 0.14);
 
   return energy;
 };

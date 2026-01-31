@@ -60,10 +60,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
   const activeInkRef = useRef(inkPalette[0]);
   const activeBrushRef = useRef(brushPresets[0]);
   const tipPatterns = [
-    { id: "classic", label: "Classique", hint: "Tracé souple" },
-    { id: "claws", label: "Griffes", hint: "Stries nerveuses" },
-    { id: "halo", label: "Auréoles", hint: "Halo aqueux" },
-    { id: "halo-complex", label: "Auréoles complexes", hint: "Rings superposés" }
+    { id: "classic", label: "Classique", hint: "Flux velouté" },
+    { id: "claws", label: "Filaments", hint: "Souffle d’encre" },
+    { id: "halo", label: "Auréoles", hint: "Vapeur lumineuse" },
+    { id: "halo-complex", label: "Nébuleuse", hint: "Textures auréolées" }
   ];
 
   const toCssColor = (v) => {
@@ -152,21 +152,22 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const applyAudioGrammar = (brush, drive, peak) => {
       const nextBrush = { ...brush };
       const nextDrive = { ...drive };
-      const pulse = clamp(0.7 + nextDrive.energy * 1.4 + peak * 0.5, 0.5, 2.2);
+      const pulse = clamp(0.6 + nextDrive.energy * 1.6 + peak * 0.8, 0.5, 2.6);
+      const impact = clamp(nextDrive.high * 1.2 + peak * 1.1, 0, 2);
       nextBrush.baseSize *= pulse;
-      nextBrush.flow = clamp(nextBrush.flow + nextDrive.energy * 0.35, 0.05, 2);
+      nextBrush.flow = clamp(nextBrush.flow + nextDrive.energy * 0.45, 0.05, 2);
 
-      nextBrush.wetness = clamp(nextBrush.wetness + nextDrive.low * 1.1, 0.05, 2.5);
-      nextBrush.spread = (nextBrush.spread ?? 1) + nextDrive.low * 1.6;
+      nextBrush.wetness = clamp(nextBrush.wetness + nextDrive.low * 1.25 + peak * 0.2, 0.05, 2.8);
+      nextBrush.spread = (nextBrush.spread ?? 1) + nextDrive.low * 1.8;
 
-      nextBrush.grain = clamp(nextBrush.grain + nextDrive.mid * 0.9, 0, 1);
-      nextBrush.flow = clamp(nextBrush.flow - nextDrive.mid * 0.12, 0.05, 2);
+      nextBrush.grain = clamp(nextBrush.grain + nextDrive.mid * 1.1, 0, 1);
+      nextBrush.flow = clamp(nextBrush.flow - nextDrive.mid * 0.18, 0.05, 2);
 
-      nextBrush.jitter = clamp(nextBrush.jitter + nextDrive.high * 0.8, 0, 2.5);
-      nextBrush.bristles = Math.round((nextBrush.bristles ?? 0) + nextDrive.high * 22);
+      nextBrush.jitter = clamp(nextBrush.jitter + impact * 1.1, 0, 3);
+      nextBrush.bristles = Math.round((nextBrush.bristles ?? 0) + impact * 24);
 
-      nextDrive.high = clamp(nextDrive.high + peak * 0.7, 0, 1.6);
-      nextDrive.energy = clamp(nextDrive.energy + peak * 0.5, 0, 1);
+      nextDrive.high = clamp(nextDrive.high + peak * 0.9, 0, 1.8);
+      nextDrive.energy = clamp(nextDrive.energy + peak * 0.65, 0, 1);
 
       return { brush: nextBrush, drive: nextDrive };
     };
