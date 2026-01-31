@@ -20,15 +20,21 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     lastTime: 0
   });
   const onPointerDown = useCallback((point) => {
-    pointerDrawRef.current.lastTime = performance.now();
+    const now = performance.now();
+    pointerDrawRef.current.lastTime = now;
     pointerDrawRef.current.lastPoint = point;
+    pointerDrawRef.current.draw?.(point, point, 0);
   }, []);
   const onPointerMove = useCallback((from, to) => {
     if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
     const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
     pointerDrawRef.current.lastTime = now;
-    pointerDrawRef.current.draw?.(from, to, dt);
+    const start = pointerDrawRef.current.lastPoint ?? from;
+    if (start) {
+      pointerDrawRef.current.draw?.(start, to, dt);
+    }
+    pointerDrawRef.current.lastPoint = to;
   }, [phaseRef]);
   const onPointerUp = useCallback(() => {
     pointerDrawRef.current.lastPoint = null;
