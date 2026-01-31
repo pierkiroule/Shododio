@@ -58,6 +58,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
   // ✅ sources stables
   const activeInkRef = useRef(inkPalette[0]);
   const activeBrushRef = useRef(brushPresets[0]);
+  const brushEffects = [
+    { id: "pulse", label: "Pulse", hint: "Énergie → taille" },
+    { id: "bassWash", label: "Marée", hint: "Basses → eau" },
+    { id: "midGrain", label: "Granité", hint: "Médiums → grain" },
+    { id: "highFilaments", label: "Filaments", hint: "Aigus → jitter" },
+    { id: "splatter", label: "Éclats", hint: "Pics → éclaboussures" }
+  ];
+  const effectsRef = useRef(
+    brushEffects.reduce((acc, effect) => ({ ...acc, [effect.id]: true }), {})
+  );
 
   const toCssColor = (v) => {
     if (!v) return "rgb(0,0,0)";
@@ -133,14 +143,55 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       };
     };
 
-    const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
+    const applyAudioGrammar = (brush, drive, peak) => {
+      const nextBrush = { ...brush };
+      const nextDrive = { ...drive };
+      const effects = effectsRef.current;
+
+      if (effects.pulse) {
+        const pulse = clamp(0.7 + nextDrive.energy * 1.4 + peak * 0.5, 0.5, 2.2);
+        nextBrush.baseSize *= pulse;
+        nextBrush.flow = clamp(nextBrush.flow + nextDrive.energy * 0.35, 0.05, 2);
+      }
+
+      if (effects.bassWash) {
+        nextBrush.wetness = clamp(nextBrush.wetness + nextDrive.low * 1.1, 0.05, 2.5);
+        nextBrush.spread = (nextBrush.spread ?? 1) + nextDrive.low * 1.6;
+      }
+
+      if (effects.midGrain) {
+        nextBrush.grain = clamp(nextBrush.grain + nextDrive.mid * 0.9, 0, 1);
+        nextBrush.flow = clamp(nextBrush.flow - nextDrive.mid * 0.12, 0.05, 2);
+      }
+
+      if (effects.highFilaments) {
+        nextBrush.jitter = clamp(nextBrush.jitter + nextDrive.high * 0.8, 0, 2.5);
+        nextBrush.bristles = Math.round((nextBrush.bristles ?? 0) + nextDrive.high * 22);
+      }
+
+      if (effects.splatter) {
+        nextDrive.high = clamp(nextDrive.high + peak * 0.7, 0, 1.6);
+        nextDrive.energy = clamp(nextDrive.energy + peak * 0.5, 0, 1);
+      }
+
+      return { brush: nextBrush, drive: nextDrive };
+    };
+
+    const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16 } = {}) => {
       const { bands, energy } = audioRef.current;
       const totalVol = bands.low + bands.mid + bands.high + energy.rms;
-      if (!force && totalVol < SILENCE_THRESHOLD) return;
+      if (totalVol < SILENCE_THRESHOLD) return;
 
       // ✅ encre toujours à jour
       const inkRgb = inkToRgb(activeInkRef.current);
       const adjustedInk = mixColor(inkRgb, paperRgb, 0.2);
+      const drive = {
+        energy: energy.rms,
+        low: bands.low,
+        mid: bands.mid,
+        high: Math.max(bands.high, energy.peak)
+      };
+      const { brush, drive: adjustedDrive } = applyAudioGrammar(getAdjustedBrush(), drive, energy.peak);
 
       drawBrush(
         ctxP,
@@ -148,13 +199,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         { x: x2, y: y2 },
         {
           ink: adjustedInk,
-          brush: getAdjustedBrush(),
-          drive: {
-            energy: energy.rms,
-            low: bands.low,
-            mid: bands.mid,
-            high: Math.max(bands.high, energy.peak)
-          },
+          brush,
+          drive: adjustedDrive,
           dt
         }
       );
@@ -165,25 +211,34 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     };
 
     const setupControls = () => {
-      const brushContainer = document.getElementById("brush-options");
+      const brushContainer = document.getElementById("brush-effects");
       const colorContainer = document.getElementById("color-options");
       brushContainer.innerHTML = "";
       colorContainer.innerHTML = "";
 
-      brushPresets.forEach((brush, index) => {
-        const btn = document.createElement("button");
-        btn.className = "chip-btn";
-        btn.textContent = brush.name;
-        btn.dataset.brushId = brush.id;
-        if (index === 0) btn.classList.add("active");
+      brushEffects.forEach((effect) => {
+        const label = document.createElement("label");
+        label.className = "effect-toggle";
 
-        btn.addEventListener("click", () => {
-          activeBrushRef.current = brush;
-          [...brushContainer.querySelectorAll(".chip-btn")].forEach((el) => el.classList.remove("active"));
-          btn.classList.add("active");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = effectsRef.current[effect.id];
+        input.addEventListener("change", (event) => {
+          effectsRef.current[effect.id] = event.target.checked;
         });
 
-        brushContainer.appendChild(btn);
+        const text = document.createElement("span");
+        text.className = "effect-text";
+        text.textContent = effect.label;
+
+        const hint = document.createElement("span");
+        hint.className = "effect-hint";
+        hint.textContent = effect.hint;
+
+        label.appendChild(input);
+        label.appendChild(text);
+        label.appendChild(hint);
+        brushContainer.appendChild(label);
       });
 
       inkPalette.forEach((ink, index) => {

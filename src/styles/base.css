@@ -288,6 +288,58 @@ canvas {
   gap: 4px;
 }
 
+.brush-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.brush-name {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(13, 13, 13, 0.7);
+}
+
+.brush-grammar {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(13, 13, 13, 0.5);
+  line-height: 1.4;
+}
+
+.effect-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.effect-toggle input[type="checkbox"] {
+  accent-color: var(--ink);
+}
+
+.effect-text {
+  font-size: 0.6rem;
+}
+
+.effect-hint {
+  grid-column: 2 / 3;
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  color: rgba(13, 13, 13, 0.5);
+}
+
 .size-row {
   display: flex;
   align-items: center;
