@@ -23,11 +23,17 @@ export const AppControls = ({
             type="button"
             onClick={() => toggleMenuSection("brushes")}
           >
-            Pinceaux
+            Brosse audioreactive
             <span className="accordion-indicator">{menuSections.brushes ? "−" : "+"}</span>
           </button>
           <div className="accordion-panel">
-            <div id="brush-options" className="option-row compact"></div>
+            <div className="brush-legend">
+              <div className="brush-name">Brosse unique : Rituel</div>
+              <div className="brush-grammar">
+                Énergie → taille • Basses → eau • Médiums → grain • Aigus → filaments • Pics → éclats
+              </div>
+            </div>
+            <div id="brush-effects" className="option-row compact"></div>
           </div>
         </section>
 
