@@ -12,7 +12,7 @@ const createTouchState = () => ({
   swipePower: 0
 });
 
-export const useTouchGuide = ({ canvasWrapRef, canvasRef }) => {
+export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPointerMove, onPointerUp }) => {
   const touchRef = useRef(createTouchState());
   const activePointerIdRef = useRef(null);
 
@@ -40,11 +40,15 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef }) => {
     touchRef.current.swipePower = 0;
     activePointerIdRef.current = event.pointerId;
     canvasWrapRef.current?.setPointerCapture?.(event.pointerId);
-  }, [canvasWrapRef, updateTouchPoint]);
+    onPointerDown?.({ x: touchRef.current.x, y: touchRef.current.y }, event);
+  }, [canvasWrapRef, onPointerDown, updateTouchPoint]);
 
   const onCanvasMove = useCallback((event) => {
     if (activePointerIdRef.current === null || event.pointerId !== activePointerIdRef.current) return;
+    const prevX = touchRef.current.x;
+    const prevY = touchRef.current.y;
     updateTouchPoint(event);
+    onPointerMove?.({ x: prevX, y: prevY }, { x: touchRef.current.x, y: touchRef.current.y }, event);
     const dx = touchRef.current.x - touchRef.current.lastX;
     const dy = touchRef.current.y - touchRef.current.lastY;
     const dist = Math.hypot(dx, dy);
@@ -55,14 +59,15 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef }) => {
       touchRef.current.lastY = touchRef.current.y;
     }
     touchRef.current.strength = 1;
-  }, [updateTouchPoint]);
+  }, [onPointerMove, updateTouchPoint]);
 
   const onCanvasRelease = useCallback((event) => {
     if (activePointerIdRef.current === null || event.pointerId !== activePointerIdRef.current) return;
     touchRef.current.active = false;
     activePointerIdRef.current = null;
     canvasWrapRef.current?.releasePointerCapture?.(event.pointerId);
-  }, [canvasWrapRef]);
+    onPointerUp?.({ x: touchRef.current.x, y: touchRef.current.y }, event);
+  }, [canvasWrapRef, onPointerUp]);
 
   const resetTouch = useCallback(() => {
     touchRef.current = createTouchState();

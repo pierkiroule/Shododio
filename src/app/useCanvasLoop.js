@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { brushPresets } from "../brushes/brushPresets";
 import { inkPalette } from "../brushes/inks";
 import { inkToRgb } from "../brushes/brushUtils";
@@ -6,7 +6,6 @@ import { useMicrophone } from "../audio/useMicrophone";
 import { clearPaper, resizePaper } from "../engine/Paper";
 import { drawBrush } from "../engine/BrushEngine";
 import { createSamplerEngine } from "../engine/SamplerEngine";
-import { createVoiceState, resetVoiceState, stepVoiceTrajectory } from "../engine/TrajectoryEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
 import { mixColor, paperRgb } from "../utils/color";
@@ -16,7 +15,31 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
   const uiRef = useRef({});
   const audioCtxRef = useRef(null);
   const { phaseRef, startTimeRef, timeLimitRef, remainingTimeRef, setPhase } = useRitualState();
-  const { touchRef, resetTouch } = useTouchGuide({ canvasWrapRef, canvasRef });
+  const pointerDrawRef = useRef({
+    draw: null,
+    lastTime: 0
+  });
+  const onPointerDown = useCallback((point) => {
+    pointerDrawRef.current.lastTime = performance.now();
+    pointerDrawRef.current.lastPoint = point;
+  }, []);
+  const onPointerMove = useCallback((from, to) => {
+    if (phaseRef.current !== "DRAWING") return;
+    const now = performance.now();
+    const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
+    pointerDrawRef.current.lastTime = now;
+    pointerDrawRef.current.draw?.(from, to, dt);
+  }, [phaseRef]);
+  const onPointerUp = useCallback(() => {
+    pointerDrawRef.current.lastPoint = null;
+  }, []);
+  const { touchRef, resetTouch } = useTouchGuide({
+    canvasWrapRef,
+    canvasRef,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp
+  });
 
   // ✅ sources stables
   const activeInkRef = useRef(inkPalette[0]);
@@ -49,7 +72,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     let recordedChunks = [];
     let mediaStream;
     let allowLayering = true;
-    let lastFrameTime = performance.now();
     let previewBusy = false;
     let cycleIndex = 0;
     let resizeObserver;
@@ -73,7 +95,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       previewFps: PREVIEW_FPS
     });
 
-    const voiceState = createVoiceState();
     const cyclesRef = { current: [] };
 
     const mainBtn = document.getElementById("main-btn");
@@ -254,8 +275,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const resetVoice = () => {
       resetTouch();
-      resetVoiceState(voiceState, paper, touchRef.current);
-      lastFrameTime = performance.now();
     };
 
     const pushCycle = (cycle) => {
@@ -325,20 +344,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       }
     };
 
-    const paintFromVoice = (timestamp) => {
-      const delta = Math.min(48, timestamp - lastFrameTime);
-      lastFrameTime = timestamp;
-
-      stepVoiceTrajectory({
-        voiceState,
-        paper,
-        canvasScale: CANVAS_SCALE,
-        delta,
-        bands: audioRef.current.bands,
-        energy: audioRef.current.energy,
-        touchState: touchRef.current,
-        draw: (x1, y1, x2, y2, dt) => drawSpectralBrush(x1, y1, x2, y2, { dt })
-      });
+    pointerDrawRef.current.draw = (from, to, dt) => {
+      drawSpectralBrush(from.x, from.y, to.x, to.y, { dt, force: true });
     };
 
     const startDrawingCycle = () => {
@@ -403,8 +410,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       if (phaseRef.current === "DRAWING") {
         const elapsed = Date.now() - startTimeRef.current;
         remainingTimeRef.current = Math.max(0, timeLimitRef.current - elapsed);
-
-        paintFromVoice(performance.now());
 
         if (remainingTimeRef.current <= 0) {
           setPhase("FINISHED");
