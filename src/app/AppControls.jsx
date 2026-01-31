@@ -12,14 +12,14 @@ export const AppControls = ({
             type="button"
             onClick={() => toggleMenuSection("brushes")}
           >
-            Motif du bout de brosse
+            Toucher aquarelle
             <span className="accordion-indicator">{menuSections.brushes ? "−" : "+"}</span>
           </button>
           <div className="accordion-panel">
             <div className="brush-legend">
-              <div className="brush-name">Brosse unique : Rituel</div>
+              <div className="brush-name">Brosse fluide : Lavis</div>
               <div className="brush-grammar">
-                Choisissez le motif du bout : griffes, auréoles ou classique
+                Choisissez le motif du bout : filaments, auréoles ou velours
               </div>
             </div>
             <div id="brush-effects" className="option-row compact"></div>
@@ -32,7 +32,7 @@ export const AppControls = ({
             type="button"
             onClick={() => toggleMenuSection("inks")}
           >
-            Encres
+            Pigments
             <span className="accordion-indicator">{menuSections.inks ? "−" : "+"}</span>
           </button>
           <div className="accordion-panel">

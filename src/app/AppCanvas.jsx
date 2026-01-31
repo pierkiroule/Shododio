@@ -1,8 +1,8 @@
 export const AppCanvas = ({ canvasRef, canvasWrapRef }) => (
   <>
     <div id="boot-screen" className="overlay">
-      <h1>LA VOIX DU SHODO</h1>
-      <p className="boot-subtitle">RITUEL VOCAL</p>
+      <h1>ATELIER AQUARELLE</h1>
+      <p className="boot-subtitle">RITUEL DE COULEURS</p>
       <button id="init-btn">Activer le Micro</button>
     </div>
 
