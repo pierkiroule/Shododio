@@ -15,6 +15,8 @@ export const resetVoiceState = (voiceState, paper, touchState) => {
   touchState.strength = 0;
   touchState.active = false;
   touchState.swipePower = 0;
+  touchState.tapBoost = 0;
+  touchState.longPress = false;
 };
 
 export const stepVoiceTrajectory = ({
@@ -28,7 +30,8 @@ export const stepVoiceTrajectory = ({
   draw
 }) => {
   const loudness = clamp(energy.rms + energy.peak * 0.6, 0, 1.2);
-  const targetVelocity = clamp(1.2 + loudness * 18 + bands.mid * 6, 1.2, 24);
+  const tapBoost = touchState.tapBoost ?? 0;
+  const targetVelocity = clamp(1 + tapBoost * 6, 0.8, 8);
   voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
 
   const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
@@ -56,6 +59,7 @@ export const stepVoiceTrajectory = ({
     }
     touchState.swipePower = Math.max(0, touchState.swipePower - delta * 0.002);
   }
+  touchState.tapBoost = Math.max(0, touchState.tapBoost - delta * 0.0012);
 
   const dx = Math.cos(voiceState.angle) * voiceState.velocity * (delta / 16);
   const dy = Math.sin(voiceState.angle) * voiceState.velocity * (delta / 16);

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { brushPresets } from "../brushes/brushPresets";
 import { inkPalette } from "../brushes/inks";
 import { inkToRgb } from "../brushes/brushUtils";
 import { useMicrophone } from "../audio/useMicrophone";
 import { clearPaper, resizePaper } from "../engine/Paper";
 import { drawBrush } from "../engine/BrushEngine";
+import { createVoiceState, resetVoiceState, stepVoiceTrajectory } from "../engine/TrajectoryEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
 import { mixColor, paperRgb } from "../utils/color";
@@ -22,39 +23,11 @@ const downloadBlob = (blob, filename) => {
 export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) => {
   const uiRef = useRef({});
   const { phaseRef, setPhase } = useRitualState();
-  const pointerDrawRef = useRef({
-    draw: null,
-    lastTime: 0
-  });
   const smoothDriveRef = useRef({ energy: 0, low: 0, mid: 0, high: 0, peak: 0 });
-  const onPointerDown = useCallback((point) => {
-    if (phaseRef.current !== "DRAWING") return;
-    const now = performance.now();
-    pointerDrawRef.current.lastTime = now;
-    pointerDrawRef.current.lastPoint = point;
-    pointerDrawRef.current.draw?.(point, point, 0);
-  }, [phaseRef]);
-  const onPointerMove = useCallback((from, to) => {
-    if (phaseRef.current !== "DRAWING") return;
-    const now = performance.now();
-    const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
-    pointerDrawRef.current.lastTime = now;
-    const start = pointerDrawRef.current.lastPoint ?? from;
-    if (start) {
-      pointerDrawRef.current.draw?.(start, to, dt);
-    }
-    pointerDrawRef.current.lastPoint = to;
-  }, [phaseRef]);
-  const onPointerUp = useCallback(() => {
-    pointerDrawRef.current.lastPoint = null;
-  }, []);
-  const { touchRef, resetTouch } = useTouchGuide({
-    canvasWrapRef,
-    canvasRef,
-    onPointerDown,
-    onPointerMove,
-    onPointerUp
-  });
+  const voiceStateRef = useRef(createVoiceState());
+  const animationFrameRef = useRef(0);
+  const lastFrameTimeRef = useRef(0);
+  const { touchRef, resetTouch } = useTouchGuide({ canvasWrapRef, canvasRef });
 
   // ✅ sources stables
   const activeInkRef = useRef(inkPalette[0]);
@@ -103,6 +76,9 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const specLow = document.getElementById("spec-low");
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
+    const brushIndicator = document.getElementById("brush-indicator");
+    const audioThickness = document.getElementById("audio-thickness");
+    const audioThicknessValue = document.getElementById("audio-thickness-value");
 
     uiRef.current = {
       statusText,
@@ -111,7 +87,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       specViz,
       specLow,
       specMid,
-      specHigh
+      specHigh,
+      brushIndicator,
+      audioThickness,
+      audioThicknessValue
     };
 
     const clearAll = () => {
@@ -125,6 +104,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const baseCtx = baseCanvas.getContext("2d", { alpha: false });
 
     const resizeCanvas = () => {
+      let snapshot = null;
+      if (baseCanvas.width > 0 && baseCanvas.height > 0) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = baseCanvas.width;
+        snapshot.height = baseCanvas.height;
+        const snapshotCtx = snapshot.getContext("2d");
+        snapshotCtx?.drawImage(baseCanvas, 0, 0);
+      }
+
       resizePaper({
         paper,
         canvasWrap,
@@ -134,7 +122,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       });
       baseCanvas.width = paper.width;
       baseCanvas.height = paper.height;
-      clearAll();
+
+      clearPaper(baseCtx, paper.width, paper.height);
+      if (snapshot) {
+        baseCtx.drawImage(snapshot, 0, 0, baseCanvas.width, baseCanvas.height);
+      }
+      ctxP.drawImage(baseCanvas, 0, 0);
     };
 
     const getAdjustedBrush = () => {
@@ -148,6 +141,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         tipPattern: b.tipPattern ?? "classic"
       };
     };
+
+    const audioThicknessRef = { current: 1 };
 
     const applyAudioGrammar = (brush, drive, peak) => {
       const nextBrush = { ...brush };
@@ -169,6 +164,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       nextDrive.high = clamp(nextDrive.high + peak * 0.9, 0, 1.8);
       nextDrive.energy = clamp(nextDrive.energy + peak * 0.65, 0, 1);
 
+      nextBrush.baseSize *= 1 + nextDrive.energy * audioThicknessRef.current;
       return { brush: nextBrush, drive: nextDrive };
     };
 
@@ -317,6 +313,18 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       });
     };
 
+    const setupAudioThickness = () => {
+      if (!audioThickness || !audioThicknessValue) return;
+      const updateValue = () => {
+        const value = Number.parseFloat(audioThickness.value || "1");
+        audioThicknessRef.current = Number.isNaN(value) ? 1 : value;
+        audioThicknessValue.textContent = audioThicknessRef.current.toFixed(1);
+      };
+      audioThickness.addEventListener("input", updateValue);
+      updateValue();
+      return () => audioThickness.removeEventListener("input", updateValue);
+    };
+
     const startAudio = async () => {
       try {
         await startMicrophone();
@@ -334,10 +342,40 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const resetVoice = () => {
       resetTouch();
+      resetVoiceState(voiceStateRef.current, paper, touchRef.current);
     };
 
-    pointerDrawRef.current.draw = (from, to, dt) => {
-      drawSpectralBrush(from.x, from.y, to.x, to.y, { dt, force: true });
+    const tick = (time) => {
+      animationFrameRef.current = window.requestAnimationFrame(tick);
+      if (brushIndicator) {
+        const rect = canvasWrap.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? rect.width / paper.width : 1;
+        const scaleY = rect.height > 0 ? rect.height / paper.height : 1;
+        brushIndicator.style.left = `${voiceStateRef.current.x * scaleX}px`;
+        brushIndicator.style.top = `${voiceStateRef.current.y * scaleY}px`;
+        brushIndicator.style.opacity = "1";
+      }
+      if (phaseRef.current !== "DRAWING") {
+        lastFrameTimeRef.current = time;
+        return;
+      }
+      const lastTime = lastFrameTimeRef.current || time;
+      const dt = Math.min(48, Math.max(8, time - lastTime));
+      lastFrameTimeRef.current = time;
+
+      stepVoiceTrajectory({
+        voiceState: voiceStateRef.current,
+        paper,
+        canvasScale: CANVAS_SCALE,
+        delta: dt,
+        bands: audioRef.current.bands,
+        energy: audioRef.current.energy,
+        touchState: touchRef.current,
+        draw: (x1, y1, x2, y2, stepDt) => {
+          drawSpectralBrush(x1, y1, x2, y2, { dt: stepDt, force: touchRef.current.longPress });
+        }
+      });
+
     };
 
     const resetRitual = () => {
@@ -360,9 +398,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     resetBtn.addEventListener("click", resetRitual);
 
     setupControls();
+    const cleanupAudioThickness = setupAudioThickness();
     resizeCanvas();
     updateCycleStatus();
     resetVoice();
+    animationFrameRef.current = window.requestAnimationFrame(tick);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -385,6 +425,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
+      cleanupAudioThickness?.();
+      window.cancelAnimationFrame(animationFrameRef.current);
     };
   }, [
     audioRef,
@@ -393,6 +435,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     exportActionsRef,
     resetTouch,
     setPhase,
-    startMicrophone
+    startMicrophone,
+    touchRef
   ]);
 };
