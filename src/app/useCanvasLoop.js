@@ -59,16 +59,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
   // ✅ sources stables
   const activeInkRef = useRef(inkPalette[0]);
   const activeBrushRef = useRef(brushPresets[0]);
-  const brushEffects = [
-    { id: "pulse", label: "Pulse", hint: "Énergie → taille" },
-    { id: "bassWash", label: "Marée", hint: "Basses → eau" },
-    { id: "midGrain", label: "Granité", hint: "Médiums → grain" },
-    { id: "highFilaments", label: "Filaments", hint: "Aigus → jitter" },
-    { id: "splatter", label: "Éclats", hint: "Pics → éclaboussures" }
+  const tipPatterns = [
+    { id: "classic", label: "Classique", hint: "Tracé souple" },
+    { id: "claws", label: "Griffes", hint: "Stries nerveuses" },
+    { id: "halo", label: "Auréoles", hint: "Halo aqueux" },
+    { id: "halo-complex", label: "Auréoles complexes", hint: "Rings superposés" }
   ];
-  const effectsRef = useRef(
-    brushEffects.reduce((acc, effect) => ({ ...acc, [effect.id]: true }), {})
-  );
 
   const toCssColor = (v) => {
     if (!v) return "rgb(0,0,0)";
@@ -148,40 +144,29 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         ...b,
         flow: clamp(b.flow, 0.05, 2),
         wetness: clamp(b.wetness, 0.05, 2.5),
-        grain: clamp(b.grain, 0, 1)
+        grain: clamp(b.grain, 0, 1),
+        tipPattern: b.tipPattern ?? "classic"
       };
     };
 
     const applyAudioGrammar = (brush, drive, peak) => {
       const nextBrush = { ...brush };
       const nextDrive = { ...drive };
-      const effects = effectsRef.current;
+      const pulse = clamp(0.7 + nextDrive.energy * 1.4 + peak * 0.5, 0.5, 2.2);
+      nextBrush.baseSize *= pulse;
+      nextBrush.flow = clamp(nextBrush.flow + nextDrive.energy * 0.35, 0.05, 2);
 
-      if (effects.pulse) {
-        const pulse = clamp(0.7 + nextDrive.energy * 1.4 + peak * 0.5, 0.5, 2.2);
-        nextBrush.baseSize *= pulse;
-        nextBrush.flow = clamp(nextBrush.flow + nextDrive.energy * 0.35, 0.05, 2);
-      }
+      nextBrush.wetness = clamp(nextBrush.wetness + nextDrive.low * 1.1, 0.05, 2.5);
+      nextBrush.spread = (nextBrush.spread ?? 1) + nextDrive.low * 1.6;
 
-      if (effects.bassWash) {
-        nextBrush.wetness = clamp(nextBrush.wetness + nextDrive.low * 1.1, 0.05, 2.5);
-        nextBrush.spread = (nextBrush.spread ?? 1) + nextDrive.low * 1.6;
-      }
+      nextBrush.grain = clamp(nextBrush.grain + nextDrive.mid * 0.9, 0, 1);
+      nextBrush.flow = clamp(nextBrush.flow - nextDrive.mid * 0.12, 0.05, 2);
 
-      if (effects.midGrain) {
-        nextBrush.grain = clamp(nextBrush.grain + nextDrive.mid * 0.9, 0, 1);
-        nextBrush.flow = clamp(nextBrush.flow - nextDrive.mid * 0.12, 0.05, 2);
-      }
+      nextBrush.jitter = clamp(nextBrush.jitter + nextDrive.high * 0.8, 0, 2.5);
+      nextBrush.bristles = Math.round((nextBrush.bristles ?? 0) + nextDrive.high * 22);
 
-      if (effects.highFilaments) {
-        nextBrush.jitter = clamp(nextBrush.jitter + nextDrive.high * 0.8, 0, 2.5);
-        nextBrush.bristles = Math.round((nextBrush.bristles ?? 0) + nextDrive.high * 22);
-      }
-
-      if (effects.splatter) {
-        nextDrive.high = clamp(nextDrive.high + peak * 0.7, 0, 1.6);
-        nextDrive.energy = clamp(nextDrive.energy + peak * 0.5, 0, 1);
-      }
+      nextDrive.high = clamp(nextDrive.high + peak * 0.7, 0, 1.6);
+      nextDrive.energy = clamp(nextDrive.energy + peak * 0.5, 0, 1);
 
       return { brush: nextBrush, drive: nextDrive };
     };
@@ -283,24 +268,29 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       brushContainer.innerHTML = "";
       colorContainer.innerHTML = "";
 
-      brushEffects.forEach((effect) => {
+      tipPatterns.forEach((pattern) => {
         const label = document.createElement("label");
         label.className = "effect-toggle";
 
         const input = document.createElement("input");
-        input.type = "checkbox";
-        input.checked = effectsRef.current[effect.id];
+        input.type = "radio";
+        input.name = "tip-pattern";
+        input.checked = activeBrushRef.current.tipPattern === pattern.id;
         input.addEventListener("change", (event) => {
-          effectsRef.current[effect.id] = event.target.checked;
+          if (!event.target.checked) return;
+          activeBrushRef.current = {
+            ...activeBrushRef.current,
+            tipPattern: pattern.id
+          };
         });
 
         const text = document.createElement("span");
         text.className = "effect-text";
-        text.textContent = effect.label;
+        text.textContent = pattern.label;
 
         const hint = document.createElement("span");
         hint.className = "effect-hint";
-        hint.textContent = effect.hint;
+        hint.textContent = pattern.hint;
 
         label.appendChild(input);
         label.appendChild(text);

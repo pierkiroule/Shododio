@@ -159,6 +159,53 @@ const addWetTrace = (ctx, cx, cy, size, rgb, intensity, dirX, dirY, rand) => {
   ctx.restore();
 };
 
+/* ---------- Motifs de bout ---------- */
+const addClawMarks = (ctx, cx, cy, size, rgb, alpha, dirX, dirY, nx, ny, rand, energy) => {
+  const count = 3 + Math.round(rand() * 3);
+  const length = size * (0.8 + energy * 1.4);
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.strokeStyle = rgba(rgb, alpha * 1.2);
+  for (let i = 0; i < count; i += 1) {
+    const spread = (rand() - 0.5) * size * 0.9;
+    const angle = (rand() - 0.5) * 0.6;
+    const dx = nx * spread;
+    const dy = ny * spread;
+    const rx = dirX * Math.cos(angle) - dirY * Math.sin(angle);
+    const ry = dirX * Math.sin(angle) + dirY * Math.cos(angle);
+    const clawLen = length * (0.6 + rand() * 0.6);
+    ctx.lineWidth = 0.35 + rand() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(cx + dx, cy + dy);
+    ctx.lineTo(cx + dx + rx * clawLen, cy + dy + ry * clawLen);
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
+const addAuraRings = (ctx, cx, cy, size, rgb, intensity, rand, layers = 2) => {
+  const tint = mixColor(rgb, paperRgb, 0.25);
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  for (let i = 0; i < layers; i += 1) {
+    const radius = size * (1.1 + i * 0.45 + rand() * 0.3);
+    ctx.strokeStyle = rgba(tint, 0.08 * intensity);
+    ctx.lineWidth = 0.4 + rand() * 0.7;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      cy,
+      radius * (0.9 + rand() * 0.2),
+      radius * (0.7 + rand() * 0.2),
+      rand() * Math.PI,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
 /* ---------- Couleur encre ---------- */
 const getInkDepth = (ink, flow) => {
   const depth = clamp(0.25 + flow * 0.35, 0.2, 0.7);
@@ -198,6 +245,7 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
   const grain = clamp(Number.isFinite(safeBrush.grain) ? safeBrush.grain : 0.35, 0, 1);
   const spread = Number.isFinite(safeBrush.spread) ? safeBrush.spread : 0.9;
   const id = safeBrush.id ?? "default";
+  const tipPattern = safeBrush.tipPattern ?? "classic";
   const haloOnly = id === "halo";
 
   const low = clamp(Number.isFinite(safeDrive.low) ? safeDrive.low : 0, 0, 1);
@@ -234,6 +282,10 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
       ctx.moveTo(cx - dirX * seg * 0.3, cy - dirY * seg * 0.3);
       ctx.lineTo(cx + dirX * seg, cy + dirY * seg);
       ctx.stroke();
+    }
+
+    if (!haloOnly && tipPattern === "claws") {
+      addClawMarks(ctx, cx, cy, size, inkDeep, alpha, dirX, dirY, nx, ny, rand, energy);
     }
 
     if (!haloOnly && bristles > 0) {
@@ -274,6 +326,16 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
       }
       if (rand() < 0.18 * (0.3 + grain)) {
         addGranulation(ctx, cx, cy, size * 1.1, safeInk, (grain + high) * 0.9, rand);
+      }
+      if (tipPattern === "halo") {
+        addAuraRings(ctx, cx, cy, size * (1 + wateriness * 0.2), safeInk, 0.9 + wateriness * 0.4, rand, 2);
+        addWaterHalo(ctx, cx, cy, size * 1.5, safeInk, 0.55 + wateriness * 0.35, rand);
+      }
+      if (tipPattern === "halo-complex") {
+        addAuraRings(ctx, cx, cy, size * (1.1 + wateriness * 0.3), safeInk, 1.1 + wateriness * 0.5, rand, 4);
+        addWaterHalo(ctx, cx, cy, size * 1.7, safeInk, 0.6 + wateriness * 0.4, rand);
+        addStain(ctx, cx, cy, size * 1.6, safeInk, 0.6 + wateriness * 0.4, rand);
+        addGranulation(ctx, cx, cy, size * 1.2, safeInk, clamp(grain * 1.4 + 0.3, 0, 1.8), rand);
       }
     }
 

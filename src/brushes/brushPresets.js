@@ -8,6 +8,7 @@ export const brushPresets = [
     grain: 0.35,
     wetness: 0.7,
     bristles: 14,
-    spread: 1.3
+    spread: 1.3,
+    tipPattern: "classic"
   }
 ];
