@@ -133,9 +133,35 @@ canvas {
   mix-blend-mode: multiply;
 }
 
+.brush-indicator {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(201, 48, 30, 0.9);
+  box-shadow: 0 0 6px rgba(201, 48, 30, 0.6), 0 0 14px rgba(201, 48, 30, 0.35);
+  opacity: 0;
+  animation: brush-pulse 1.1s ease-in-out infinite;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 120;
+}
+
 @keyframes ink-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes brush-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.15);
   }
 }
 

@@ -11,6 +11,7 @@ export const AppCanvas = ({ canvasRef, canvasWrapRef }) => (
       <div className="paper-texture"></div>
       <div id="ui-layer" className="ui-layer">
         <div className="shodo-indicator" aria-hidden="true"></div>
+        <div id="brush-indicator" className="brush-indicator" aria-hidden="true"></div>
         <div className="top-ui">
           <div id="status-msg">
             <div id="rec-dot"></div>

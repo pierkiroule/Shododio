@@ -76,6 +76,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const specLow = document.getElementById("spec-low");
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
+    const brushIndicator = document.getElementById("brush-indicator");
 
     uiRef.current = {
       statusText,
@@ -84,7 +85,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       specViz,
       specLow,
       specMid,
-      specHigh
+      specHigh,
+      brushIndicator
     };
 
     const clearAll = () => {
@@ -98,6 +100,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const baseCtx = baseCanvas.getContext("2d", { alpha: false });
 
     const resizeCanvas = () => {
+      let snapshot = null;
+      if (baseCanvas.width > 0 && baseCanvas.height > 0) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = baseCanvas.width;
+        snapshot.height = baseCanvas.height;
+        const snapshotCtx = snapshot.getContext("2d");
+        snapshotCtx?.drawImage(baseCanvas, 0, 0);
+      }
+
       resizePaper({
         paper,
         canvasWrap,
@@ -107,7 +118,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       });
       baseCanvas.width = paper.width;
       baseCanvas.height = paper.height;
-      clearAll();
+
+      clearPaper(baseCtx, paper.width, paper.height);
+      if (snapshot) {
+        baseCtx.drawImage(snapshot, 0, 0, baseCanvas.width, baseCanvas.height);
+      }
+      ctxP.drawImage(baseCanvas, 0, 0);
     };
 
     const getAdjustedBrush = () => {
@@ -312,6 +328,14 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const tick = (time) => {
       animationFrameRef.current = window.requestAnimationFrame(tick);
+      if (brushIndicator) {
+        const rect = canvasWrap.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? rect.width / paper.width : 1;
+        const scaleY = rect.height > 0 ? rect.height / paper.height : 1;
+        brushIndicator.style.left = `${voiceStateRef.current.x * scaleX}px`;
+        brushIndicator.style.top = `${voiceStateRef.current.y * scaleY}px`;
+        brushIndicator.style.opacity = "1";
+      }
       if (phaseRef.current !== "DRAWING") {
         lastFrameTimeRef.current = time;
         return;
@@ -332,6 +356,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
           drawSpectralBrush(x1, y1, x2, y2, { dt: stepDt });
         }
       });
+
     };
 
     const resetRitual = () => {
