@@ -5,28 +5,36 @@ import { inkToRgb } from "../brushes/brushUtils";
 import { useMicrophone } from "../audio/useMicrophone";
 import { clearPaper, resizePaper } from "../engine/Paper";
 import { drawBrush } from "../engine/BrushEngine";
-import { createSamplerEngine } from "../engine/SamplerEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
 import { mixColor, paperRgb } from "../utils/color";
 import { clamp } from "../utils/math";
 
-export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryActionsRef }) => {
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) => {
   const uiRef = useRef({});
-  const audioCtxRef = useRef(null);
-  const { phaseRef, startTimeRef, setPhase } = useRitualState();
+  const { phaseRef, setPhase } = useRitualState();
   const pointerDrawRef = useRef({
     draw: null,
     lastTime: 0
   });
   const onPointerDown = useCallback((point) => {
+    if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
     pointerDrawRef.current.lastTime = now;
     pointerDrawRef.current.lastPoint = point;
     pointerDrawRef.current.draw?.(point, point, 0);
-  }, []);
+  }, [phaseRef]);
   const onPointerMove = useCallback((from, to) => {
-    if (phaseRef.current !== "DRAWING" && phaseRef.current !== "READY") return;
+    if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
     const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
     pointerDrawRef.current.lastTime = now;
@@ -84,35 +92,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const ctxP = paper.getContext("2d", { alpha: false });
 
-    let allowLayering = true;
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
-    const PREVIEW_LONG_EDGE = 360;
-    const PREVIEW_FPS = 20;
     const SILENCE_THRESHOLD = 0.01;
-
-    const previewCanvas = document.createElement("canvas");
-    const previewCtx = previewCanvas.getContext("2d", { alpha: false });
-    const exportCanvas = document.createElement("canvas");
-    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
-    const sampler = createSamplerEngine({
-      previewCanvas,
-      previewCtx,
-      exportCanvas,
-      exportCtx,
-      audioCtxRef,
-      previewFps: PREVIEW_FPS
-    });
-
-    const cyclesRef = { current: [] };
 
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
     const audioMeter = document.getElementById("audio-meter");
     const specViz = document.getElementById("spectrum-viz");
-    const layeringToggle = document.getElementById("layering-toggle");
-    const layeringValue = document.getElementById("layering-value");
     const initBtn = document.getElementById("init-btn");
     const resetBtn = document.getElementById("reset-btn");
     const specLow = document.getElementById("spec-low");
@@ -131,14 +119,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const clearAll = () => clearPaper(ctxP, paper.width, paper.height);
 
+    const exportCanvas = document.createElement("canvas");
+    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
+
     const resizeCanvas = () => {
       resizePaper({
         paper,
         canvasWrap,
         exportCanvas,
-        previewCanvas,
         canvasScale: CANVAS_SCALE,
-        previewLongEdge: PREVIEW_LONG_EDGE,
         onClear: () => clearAll()
       });
     };
@@ -217,8 +206,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       );
     };
 
-    const updateCycleStatus = () => {
-      statusText.innerText = phaseRef.current === "DRAWING" ? "Micro actif" : "Prêt à écouter";
+    const updateCycleStatus = (label = "Prêt à écouter") => {
+      statusText.innerText = label;
     };
 
     const setupControls = () => {
@@ -270,30 +259,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       });
     };
 
-    const setupLayeringControl = () => {
-      const updateLayering = (checked) => {
-        allowLayering = checked;
-        layeringValue.textContent = checked ? "Superposer" : "Nettoyer";
-      };
-      const onToggle = (event) => updateLayering(event.target.checked);
-      layeringToggle.addEventListener("change", onToggle);
-      updateLayering(layeringToggle.checked);
-      return () => {
-        layeringToggle.removeEventListener("change", onToggle);
-      };
-    };
-
     const startAudio = async () => {
       try {
         await startMicrophone();
-        audioCtxRef.current = audioRef.current.ctx;
         document.getElementById("boot-screen").classList.add("hidden");
         setPhase("DRAWING");
-        startTimeRef.current = Date.now();
+        recDot.classList.add("active");
         if (audioMeter) audioMeter.classList.add("active");
         if (specViz) specViz.style.opacity = 1;
-        if (recDot) recDot.classList.add("active");
-        if (statusText) statusText.innerText = "Micro actif";
+        statusText.innerText = "Voix en peinture...";
       } catch (error) {
         console.error(error);
         alert("Micro requis.");
@@ -304,43 +278,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       resetTouch();
     };
 
-    const updateCycleSelection = (id, selected) => {
-      updateCycles((prev) => {
-        const next = prev.map((cycle) => (cycle.id === id ? { ...cycle, selected } : cycle));
-        cyclesRef.current = next;
-        return next;
-      });
-    };
-
-    const deleteCycle = (id) => {
-      updateCycles((prev) => {
-        const next = prev.filter((cycle) => {
-          if (cycle.id === id) sampler.cleanupCycleAssets(cycle);
-          return cycle.id !== id;
-        });
-        cyclesRef.current = next;
-        return next;
-      });
-    };
-
-    const clearGallery = () => {
-      updateCycles((prev) => {
-        prev.forEach((cycle) => sampler.cleanupCycleAssets(cycle));
-        cyclesRef.current = [];
-        return [];
-      });
-    };
-
     pointerDrawRef.current.draw = (from, to, dt) => {
-      drawSpectralBrush(from.x, from.y, to.x, to.y, { dt });
+      drawSpectralBrush(from.x, from.y, to.x, to.y, { dt, force: true });
     };
 
     const resetRitual = () => {
-      setPhase("DRAWING");
       clearAll();
       resetVoice();
-      startTimeRef.current = Date.now();
-      updateCycleStatus();
+
+      updateCycleStatus(phaseRef.current === "DRAWING" ? "Voix en peinture..." : "Prêt à écouter");
     };
 
     const onInitClick = () => {
@@ -354,8 +300,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
 
-    const cleanupLayering = setupLayeringControl();
-
     setupControls();
     resizeCanvas();
     updateCycleStatus();
@@ -365,38 +309,31 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     resizeObserver.observe(canvasWrap);
     window.addEventListener("resize", resizeCanvas);
 
-    galleryActionsRef.current = {
-      updateCycleSelection,
-      deleteCycle,
-      clearGallery,
-      exportImageHD: sampler.exportImageHD,
-      exportCycleAV: sampler.exportCycleAV,
-      exportGlobalImage: sampler.exportGlobalImage,
-      exportGroupedAV: sampler.exportGroupedAV,
-      exportStopMotionGIF: sampler.exportStopMotionGIF,
-      exportZipBundle: sampler.exportZipBundle
+    exportActionsRef.current = {
+      exportImageHD: () => {
+        exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+        exportCtx.drawImage(paper, 0, 0, exportCanvas.width, exportCanvas.height);
+        exportCanvas.toBlob((blob) => {
+          if (!blob) return;
+          downloadBlob(blob, "shodo.png");
+        }, "image/png");
+      }
     };
 
     return () => {
-      cleanupLayering();
-
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
-
-      cyclesRef.current.forEach((cycle) => sampler.cleanupCycleAssets(cycle));
     };
   }, [
     audioRef,
     canvasRef,
     canvasWrapRef,
-    galleryActionsRef,
+    exportActionsRef,
     resetTouch,
     setPhase,
-    startMicrophone,
-    startTimeRef,
-    updateCycles
+    startMicrophone
   ]);
 };
