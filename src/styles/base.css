@@ -257,6 +257,11 @@ canvas {
   gap: 15px;
 }
 
+.slider-block {
+  width: min(320px, 100%);
+  align-items: center;
+}
+
 .action-controls {
   display: flex;
   align-items: center;

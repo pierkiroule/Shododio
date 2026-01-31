@@ -10,12 +10,14 @@ const createTouchState = () => ({
   lastY: 0,
   swipeAngle: 0,
   swipePower: 0,
-  tapBoost: 0
+  tapBoost: 0,
+  longPress: false
 });
 
 export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPointerMove, onPointerUp }) => {
   const touchRef = useRef(createTouchState());
   const activePointerIdRef = useRef(null);
+  const longPressTimeoutRef = useRef(0);
 
   const updateTouchPoint = useCallback((event) => {
     const canvasWrap = canvasWrapRef.current;
@@ -40,6 +42,13 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPoint
     touchRef.current.active = true;
     touchRef.current.swipePower = 0;
     touchRef.current.tapBoost = clamp(touchRef.current.tapBoost + 0.35, 0, 1.5);
+    touchRef.current.longPress = false;
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current);
+    }
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      touchRef.current.longPress = true;
+    }, 1000);
     activePointerIdRef.current = event.pointerId;
     canvasWrapRef.current?.setPointerCapture?.(event.pointerId);
     onPointerDown?.({ x: touchRef.current.x, y: touchRef.current.y }, event);
@@ -66,7 +75,12 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPoint
   const onCanvasRelease = useCallback((event) => {
     if (activePointerIdRef.current === null || event.pointerId !== activePointerIdRef.current) return;
     touchRef.current.active = false;
+    touchRef.current.longPress = false;
     activePointerIdRef.current = null;
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = 0;
+    }
     canvasWrapRef.current?.releasePointerCapture?.(event.pointerId);
     onPointerUp?.({ x: touchRef.current.x, y: touchRef.current.y }, event);
   }, [canvasWrapRef, onPointerUp]);
@@ -74,6 +88,10 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPoint
   const resetTouch = useCallback(() => {
     touchRef.current = createTouchState();
     activePointerIdRef.current = null;
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = 0;
+    }
   }, []);
 
   useEffect(() => {

@@ -77,6 +77,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
     const brushIndicator = document.getElementById("brush-indicator");
+    const audioThickness = document.getElementById("audio-thickness");
+    const audioThicknessValue = document.getElementById("audio-thickness-value");
 
     uiRef.current = {
       statusText,
@@ -86,7 +88,9 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       specLow,
       specMid,
       specHigh,
-      brushIndicator
+      brushIndicator,
+      audioThickness,
+      audioThicknessValue
     };
 
     const clearAll = () => {
@@ -138,6 +142,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       };
     };
 
+    const audioThicknessRef = { current: 1 };
+
     const applyAudioGrammar = (brush, drive, peak) => {
       const nextBrush = { ...brush };
       const nextDrive = { ...drive };
@@ -158,6 +164,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       nextDrive.high = clamp(nextDrive.high + peak * 0.9, 0, 1.8);
       nextDrive.energy = clamp(nextDrive.energy + peak * 0.65, 0, 1);
 
+      nextBrush.baseSize *= 1 + nextDrive.energy * audioThicknessRef.current;
       return { brush: nextBrush, drive: nextDrive };
     };
 
@@ -306,6 +313,18 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       });
     };
 
+    const setupAudioThickness = () => {
+      if (!audioThickness || !audioThicknessValue) return;
+      const updateValue = () => {
+        const value = Number.parseFloat(audioThickness.value || "1");
+        audioThicknessRef.current = Number.isNaN(value) ? 1 : value;
+        audioThicknessValue.textContent = audioThicknessRef.current.toFixed(1);
+      };
+      audioThickness.addEventListener("input", updateValue);
+      updateValue();
+      return () => audioThickness.removeEventListener("input", updateValue);
+    };
+
     const startAudio = async () => {
       try {
         await startMicrophone();
@@ -353,7 +372,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         energy: audioRef.current.energy,
         touchState: touchRef.current,
         draw: (x1, y1, x2, y2, stepDt) => {
-          drawSpectralBrush(x1, y1, x2, y2, { dt: stepDt });
+          drawSpectralBrush(x1, y1, x2, y2, { dt: stepDt, force: touchRef.current.longPress });
         }
       });
 
@@ -379,6 +398,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     resetBtn.addEventListener("click", resetRitual);
 
     setupControls();
+    const cleanupAudioThickness = setupAudioThickness();
     resizeCanvas();
     updateCycleStatus();
     resetVoice();
@@ -405,6 +425,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
+      cleanupAudioThickness?.();
       window.cancelAnimationFrame(animationFrameRef.current);
     };
   }, [

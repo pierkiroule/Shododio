@@ -16,6 +16,7 @@ export const resetVoiceState = (voiceState, paper, touchState) => {
   touchState.active = false;
   touchState.swipePower = 0;
   touchState.tapBoost = 0;
+  touchState.longPress = false;
 };
 
 export const stepVoiceTrajectory = ({
