@@ -4,7 +4,8 @@ export const createVoiceState = () => ({
   x: 0,
   y: 0,
   angle: 0,
-  velocity: 0
+  velocity: 0,
+  resonancePhase: Math.random() * Math.PI * 2
 });
 
 export const resetVoiceState = (voiceState, paper, touchState) => {
@@ -12,6 +13,7 @@ export const resetVoiceState = (voiceState, paper, touchState) => {
   voiceState.y = paper.height * (0.35 + Math.random() * 0.3);
   voiceState.angle = Math.random() * Math.PI * 2;
   voiceState.velocity = 0;
+  voiceState.resonancePhase = Math.random() * Math.PI * 2;
   touchState.strength = 0;
   touchState.active = false;
   touchState.swipePower = 0;
@@ -31,11 +33,17 @@ export const stepVoiceTrajectory = ({
 }) => {
   const loudness = clamp(energy.rms + energy.peak * 0.6, 0, 1.2);
   const tapBoost = touchState.tapBoost ?? 0;
-  const targetVelocity = clamp(1 + tapBoost * 6, 0.8, 8);
-  voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
+  const resonanceForce = clamp(0.35 + bands.low * 1.8 + bands.mid * 0.6 + loudness * 0.9 + tapBoost * 1.4, 0, 3);
+  const resonanceRate = 0.0025 + bands.low * 0.012 + bands.high * 0.006 + loudness * 0.01 + tapBoost * 0.015;
+  voiceState.resonancePhase += delta * resonanceRate;
 
-  const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
-  voiceState.angle += turnAmount;
+  const wave = Math.sin(voiceState.resonancePhase);
+  const waveSlow = Math.sin(voiceState.resonancePhase * 0.65 + 1.4);
+  const oscillation = (wave * 0.7 + waveSlow * 0.3) * (0.08 + resonanceForce * 0.12);
+
+  const targetVelocity = clamp(0.9 + resonanceForce * (0.75 + 0.55 * (wave + 1) * 0.5), 0.6, 6.5);
+  voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.18;
+  voiceState.angle += oscillation;
 
   if (touchState.strength > 0) {
     const dxTouch = touchState.x - voiceState.x;
