@@ -3,7 +3,10 @@ export const AppCanvas = ({ canvasRef, canvasWrapRef }) => (
     <div id="boot-screen" className="overlay">
       <h1>LA VOIX DU SHODO</h1>
       <p className="boot-subtitle">RITUEL VOCAL</p>
-      <button id="init-btn">Activer le Micro</button>
+      <div className="boot-actions">
+        <button id="init-btn">Activer le Micro</button>
+        <button id="mp3-btn" className="chip-btn ghost" type="button">Importer un MP3</button>
+      </div>
     </div>
 
     <div className="canvas-area" ref={canvasWrapRef}>

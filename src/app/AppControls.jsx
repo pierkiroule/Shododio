@@ -42,6 +42,24 @@ export const AppControls = ({
 
         <section className="accordion-item open">
           <button className="accordion-trigger" type="button" disabled>
+            Source audio
+          </button>
+          <div className="accordion-panel">
+            <div className="audio-import">
+              <label className="audio-label" htmlFor="mp3-input">
+                Importer un MP3
+              </label>
+              <input id="mp3-input" type="file" accept="audio/mpeg,audio/mp3" />
+              <div className="audio-hint">
+                <span id="mp3-name">Aucun fichier chargé.</span>
+                <span>Le MP3 remplace le micro pour la brosse.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="accordion-item open">
+          <button className="accordion-trigger" type="button" disabled>
             Export
           </button>
           <div className="accordion-panel">

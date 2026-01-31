@@ -72,7 +72,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     return `rgb(${v.r}, ${v.g}, ${v.b})`;
   };
 
-  const { audioRef, startMicrophone } = useMicrophone({
+  const { audioRef, startMicrophone, startAudioFile } = useMicrophone({
     onSpectrum: ({ bands }) => {
       const { specLow, specMid, specHigh } = uiRef.current;
       if (!specLow || phaseRef.current !== "DRAWING") return;
@@ -103,6 +103,9 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const specLow = document.getElementById("spec-low");
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
+    const mp3Btn = document.getElementById("mp3-btn");
+    const mp3Input = document.getElementById("mp3-input");
+    const mp3Name = document.getElementById("mp3-name");
 
     uiRef.current = {
       statusText,
@@ -111,7 +114,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       specViz,
       specLow,
       specMid,
-      specHigh
+      specHigh,
+      mp3Btn,
+      mp3Input,
+      mp3Name
     };
 
     const clearAll = () => {
@@ -328,7 +334,24 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         statusText.innerText = "Voix en peinture...";
       } catch (error) {
         console.error(error);
-        alert("Micro requis.");
+        alert("Micro requis ou import MP3.");
+      }
+    };
+
+    const startMp3 = async (file) => {
+      if (!file) return;
+      try {
+        await startAudioFile(file);
+        document.getElementById("boot-screen").classList.add("hidden");
+        setPhase("DRAWING");
+        recDot.classList.add("active");
+        if (audioMeter) audioMeter.classList.add("active");
+        if (specViz) specViz.style.opacity = 1;
+        statusText.innerText = "MP3 en résonance...";
+        if (mp3Name) mp3Name.innerText = file.name;
+      } catch (error) {
+        console.error(error);
+        alert("Lecture MP3 impossible.");
       }
     };
 
@@ -356,8 +379,22 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       }
     };
 
+    const onMp3Click = () => {
+      if (mp3Input) mp3Input.click();
+    };
+
+    const onMp3Input = (event) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        startMp3(file);
+      }
+      event.target.value = "";
+    };
+
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
+    if (mp3Btn) mp3Btn.addEventListener("click", onMp3Click);
+    if (mp3Input) mp3Input.addEventListener("change", onMp3Input);
 
     setupControls();
     resizeCanvas();
@@ -382,6 +419,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     return () => {
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
+      if (mp3Btn) mp3Btn.removeEventListener("click", onMp3Click);
+      if (mp3Input) mp3Input.removeEventListener("change", onMp3Input);
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
@@ -393,6 +432,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     exportActionsRef,
     resetTouch,
     setPhase,
-    startMicrophone
+    startMicrophone,
+    startAudioFile
   ]);
 };
