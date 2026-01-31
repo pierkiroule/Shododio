@@ -9,7 +9,8 @@ const createTouchState = () => ({
   lastX: 0,
   lastY: 0,
   swipeAngle: 0,
-  swipePower: 0
+  swipePower: 0,
+  tapBoost: 0
 });
 
 export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPointerMove, onPointerUp }) => {
@@ -38,6 +39,7 @@ export const useTouchGuide = ({ canvasWrapRef, canvasRef, onPointerDown, onPoint
     touchRef.current.strength = 1;
     touchRef.current.active = true;
     touchRef.current.swipePower = 0;
+    touchRef.current.tapBoost = clamp(touchRef.current.tapBoost + 0.35, 0, 1.5);
     activePointerIdRef.current = event.pointerId;
     canvasWrapRef.current?.setPointerCapture?.(event.pointerId);
     onPointerDown?.({ x: touchRef.current.x, y: touchRef.current.y }, event);
