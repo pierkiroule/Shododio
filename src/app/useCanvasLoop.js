@@ -26,6 +26,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     draw: null,
     lastTime: 0
   });
+  const strokesRef = useRef([]);
+  const animationRef = useRef({ frameId: null, lastTime: 0 });
   const onPointerDown = useCallback((point) => {
     if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
@@ -117,10 +119,15 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       specHigh
     };
 
-    const clearAll = () => clearPaper(ctxP, paper.width, paper.height);
+    const clearAll = () => {
+      clearPaper(baseCtx, paper.width, paper.height);
+      ctxP.drawImage(baseCanvas, 0, 0);
+    };
 
     const exportCanvas = document.createElement("canvas");
     const exportCtx = exportCanvas.getContext("2d", { alpha: false });
+    const baseCanvas = document.createElement("canvas");
+    const baseCtx = baseCanvas.getContext("2d", { alpha: false });
 
     const resizeCanvas = () => {
       resizePaper({
@@ -128,8 +135,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
         canvasWrap,
         exportCanvas,
         canvasScale: CANVAS_SCALE,
-        onClear: () => clearAll()
+        onClear: null
       });
+      baseCanvas.width = paper.width;
+      baseCanvas.height = paper.height;
+      clearAll();
     };
 
     const getAdjustedBrush = () => {
@@ -177,21 +187,59 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       return { brush: nextBrush, drive: nextDrive };
     };
 
-    const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16 } = {}) => {
+    const getLiveDrive = () => {
       const { bands, energy } = audioRef.current;
-      const totalVol = bands.low + bands.mid + bands.high + energy.rms;
-      if (totalVol < SILENCE_THRESHOLD) return;
+      return {
+        energy: energy.rms,
+        low: bands.low,
+        mid: bands.mid,
+        high: Math.max(bands.high, energy.peak),
+        peak: energy.peak
+      };
+    };
+
+    const blendDrive = (baseDrive, liveDrive) => {
+      const mix = 0.65;
+      return {
+        energy: clamp(baseDrive.energy * (1 - mix) + liveDrive.energy * mix, 0, 1),
+        low: clamp(baseDrive.low * (1 - mix) + liveDrive.low * mix, 0, 1.2),
+        mid: clamp(baseDrive.mid * (1 - mix) + liveDrive.mid * mix, 0, 1.2),
+        high: clamp(baseDrive.high * (1 - mix) + liveDrive.high * mix, 0, 1.6)
+      };
+    };
+
+    const storeStrokeSegment = ({ from, to, ink, brush, drive }) => {
+      const seed = Math.floor(Math.random() * 1e9);
+      strokesRef.current.push({
+        from,
+        to,
+        ink,
+        brush,
+        drive,
+        seed
+      });
+      if (strokesRef.current.length > 6000) {
+        strokesRef.current.shift();
+      }
+    };
+
+    const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
+      const liveDrive = getLiveDrive();
+      const totalVol = liveDrive.low + liveDrive.mid + liveDrive.high + liveDrive.energy;
+      if (totalVol < SILENCE_THRESHOLD && !force) return;
 
       // ✅ encre toujours à jour
       const inkRgb = inkToRgb(activeInkRef.current);
       const adjustedInk = mixColor(inkRgb, paperRgb, 0.2);
-      const drive = {
-        energy: energy.rms,
-        low: bands.low,
-        mid: bands.mid,
-        high: Math.max(bands.high, energy.peak)
+      const baseBrush = getAdjustedBrush();
+      const baseDrive = {
+        energy: liveDrive.energy,
+        low: liveDrive.low,
+        mid: liveDrive.mid,
+        high: liveDrive.high
       };
-      const { brush, drive: adjustedDrive } = applyAudioGrammar(getAdjustedBrush(), drive, energy.peak);
+      const blendedDrive = blendDrive(baseDrive, liveDrive);
+      const { brush, drive: adjustedDrive } = applyAudioGrammar(baseBrush, blendedDrive, liveDrive.peak);
 
       drawBrush(
         ctxP,
@@ -204,6 +252,13 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
           dt
         }
       );
+      storeStrokeSegment({
+        from: { x: x1, y: y1 },
+        to: { x: x2, y: y2 },
+        ink: adjustedInk,
+        brush: baseBrush,
+        drive: baseDrive
+      });
     };
 
     const updateCycleStatus = (label = "Prêt à écouter") => {
@@ -284,9 +339,36 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const resetRitual = () => {
       clearAll();
+      strokesRef.current = [];
       resetVoice();
 
       updateCycleStatus(phaseRef.current === "DRAWING" ? "Voix en peinture..." : "Prêt à écouter");
+    };
+
+    const renderFrame = (time) => {
+      const frameDt = time - (animationRef.current.lastTime || time);
+      animationRef.current.lastTime = time;
+
+      ctxP.drawImage(baseCanvas, 0, 0);
+
+      const segments = strokesRef.current;
+      if (segments.length > 0) {
+        const liveDrive = getLiveDrive();
+        const livePeak = liveDrive.peak;
+        segments.forEach((segment) => {
+          const blendedDrive = blendDrive(segment.drive, liveDrive);
+          const { brush, drive } = applyAudioGrammar(segment.brush, blendedDrive, livePeak);
+          drawBrush(ctxP, segment.from, segment.to, {
+            ink: segment.ink,
+            brush,
+            drive,
+            dt: frameDt,
+            seed: segment.seed
+          });
+        });
+      }
+
+      animationRef.current.frameId = requestAnimationFrame(renderFrame);
     };
 
     const onInitClick = () => {
@@ -304,6 +386,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     resizeCanvas();
     updateCycleStatus();
     resetVoice();
+    animationRef.current.frameId = requestAnimationFrame(renderFrame);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -326,6 +409,9 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
+      if (animationRef.current.frameId) {
+        cancelAnimationFrame(animationRef.current.frameId);
+      }
     };
   }, [
     audioRef,
