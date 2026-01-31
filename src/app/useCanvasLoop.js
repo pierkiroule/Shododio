@@ -28,6 +28,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
   });
   const strokesRef = useRef([]);
   const animationRef = useRef({ frameId: null, lastTime: 0 });
+  const smoothDriveRef = useRef({ energy: 0, low: 0, mid: 0, high: 0, peak: 0 });
   const onPointerDown = useCallback((point) => {
     if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
@@ -198,6 +199,21 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       };
     };
 
+    const smoothDrive = (liveDrive, dt = 16) => {
+      const safeDt = Math.max(1, Math.min(48, dt));
+      const t = 1 - Math.exp(-safeDt / 120);
+      const prev = smoothDriveRef.current;
+      const next = {
+        energy: prev.energy + (liveDrive.energy - prev.energy) * t,
+        low: prev.low + (liveDrive.low - prev.low) * t,
+        mid: prev.mid + (liveDrive.mid - prev.mid) * t,
+        high: prev.high + (liveDrive.high - prev.high) * t,
+        peak: prev.peak + (liveDrive.peak - prev.peak) * t
+      };
+      smoothDriveRef.current = next;
+      return next;
+    };
+
     const blendDrive = (baseDrive, liveDrive) => {
       const mix = 0.65;
       return {
@@ -225,6 +241,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
       const liveDrive = getLiveDrive();
+      const smoothedDrive = smoothDrive(liveDrive, dt);
       const totalVol = liveDrive.low + liveDrive.mid + liveDrive.high + liveDrive.energy;
       if (totalVol < SILENCE_THRESHOLD && !force) return;
 
@@ -233,13 +250,13 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       const adjustedInk = mixColor(inkRgb, paperRgb, 0.2);
       const baseBrush = getAdjustedBrush();
       const baseDrive = {
-        energy: liveDrive.energy,
-        low: liveDrive.low,
-        mid: liveDrive.mid,
-        high: liveDrive.high
+        energy: smoothedDrive.energy,
+        low: smoothedDrive.low,
+        mid: smoothedDrive.mid,
+        high: smoothedDrive.high
       };
-      const blendedDrive = blendDrive(baseDrive, liveDrive);
-      const { brush, drive: adjustedDrive } = applyAudioGrammar(baseBrush, blendedDrive, liveDrive.peak);
+      const blendedDrive = blendDrive(baseDrive, smoothedDrive);
+      const { brush, drive: adjustedDrive } = applyAudioGrammar(baseBrush, blendedDrive, smoothedDrive.peak);
 
       drawBrush(
         ctxP,
@@ -340,6 +357,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const resetRitual = () => {
       clearAll();
       strokesRef.current = [];
+      smoothDriveRef.current = { energy: 0, low: 0, mid: 0, high: 0, peak: 0 };
       resetVoice();
 
       updateCycleStatus(phaseRef.current === "DRAWING" ? "Voix en peinture..." : "Prêt à écouter");
@@ -353,7 +371,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
       const segments = strokesRef.current;
       if (segments.length > 0) {
-        const liveDrive = getLiveDrive();
+        const liveDrive = smoothDrive(getLiveDrive(), frameDt);
         const livePeak = liveDrive.peak;
         segments.forEach((segment) => {
           const blendedDrive = blendDrive(segment.drive, liveDrive);
