@@ -28,7 +28,7 @@ export const stepVoiceTrajectory = ({
   draw
 }) => {
   const loudness = clamp(energy.rms + energy.peak * 0.6, 0, 1.2);
-  const targetVelocity = clamp(1.2 + loudness * 18 + bands.mid * 6, 1.2, 24);
+  const targetVelocity = clamp(0.8 + loudness * 11 + bands.mid * 3.5, 0.8, 14);
   voiceState.velocity += (targetVelocity - voiceState.velocity) * 0.15;
 
   const turnAmount = (Math.random() - 0.5) * (0.18 + bands.high * 1.1 + loudness * 0.8);
