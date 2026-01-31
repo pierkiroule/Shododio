@@ -21,9 +21,9 @@ export const clearPaper = (ctx, width, height) => {
 export const resizePaper = ({
   paper,
   canvasWrap,
+  canvasScale,
   exportCanvas,
   previewCanvas,
-  canvasScale,
   previewLongEdge,
   onClear
 }) => {
@@ -35,17 +35,21 @@ export const resizePaper = ({
   paper.width = width;
   paper.height = height;
 
-  exportCanvas.width = width;
-  exportCanvas.height = height;
+  if (exportCanvas) {
+    exportCanvas.width = width;
+    exportCanvas.height = height;
+  }
 
-  const ratio = width / height;
-  const previewWidth =
-    ratio >= 1 ? previewLongEdge : Math.round(previewLongEdge * ratio);
-  const previewHeight =
-    ratio >= 1 ? Math.round(previewLongEdge / ratio) : previewLongEdge;
+  if (previewCanvas && previewLongEdge) {
+    const ratio = width / height;
+    const previewWidth =
+      ratio >= 1 ? previewLongEdge : Math.round(previewLongEdge * ratio);
+    const previewHeight =
+      ratio >= 1 ? Math.round(previewLongEdge / ratio) : previewLongEdge;
 
-  previewCanvas.width = Math.max(1, previewWidth);
-  previewCanvas.height = Math.max(1, previewHeight);
+    previewCanvas.width = Math.max(1, previewWidth);
+    previewCanvas.height = Math.max(1, previewHeight);
+  }
 
   onClear?.(width, height);
 };

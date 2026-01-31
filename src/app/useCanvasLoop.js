@@ -5,15 +5,13 @@ import { inkToRgb } from "../brushes/brushUtils";
 import { useMicrophone } from "../audio/useMicrophone";
 import { clearPaper, resizePaper } from "../engine/Paper";
 import { drawBrush } from "../engine/BrushEngine";
-import { createSamplerEngine } from "../engine/SamplerEngine";
 import { useTouchGuide } from "../interaction/useTouchGuide";
 import { useRitualState } from "../ritual/useRitualState";
 import { mixColor, paperRgb } from "../utils/color";
 import { clamp } from "../utils/math";
 
-export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryActionsRef }) => {
+export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
   const uiRef = useRef({});
-  const audioCtxRef = useRef(null);
   const { phaseRef, startTimeRef, timeLimitRef, remainingTimeRef, setPhase } = useRitualState();
   const pointerDrawRef = useRef({
     draw: null,
@@ -74,34 +72,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const ctxP = paper.getContext("2d", { alpha: false });
 
-    let mediaRecorder;
-    let recordedChunks = [];
-    let mediaStream;
     let allowLayering = true;
-    let previewBusy = false;
-    let cycleIndex = 0;
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
-    const PREVIEW_LONG_EDGE = 360;
-    const PREVIEW_FPS = 20;
-    const MAX_CYCLES = 5;
     const SILENCE_THRESHOLD = 0.01;
-
-    const previewCanvas = document.createElement("canvas");
-    const previewCtx = previewCanvas.getContext("2d", { alpha: false });
-    const exportCanvas = document.createElement("canvas");
-    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
-    const sampler = createSamplerEngine({
-      previewCanvas,
-      previewCtx,
-      exportCanvas,
-      exportCtx,
-      audioCtxRef,
-      previewFps: PREVIEW_FPS
-    });
-
-    const cyclesRef = { current: [] };
 
     const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
@@ -134,10 +109,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       resizePaper({
         paper,
         canvasWrap,
-        exportCanvas,
-        previewCanvas,
         canvasScale: CANVAS_SCALE,
-        previewLongEdge: PREVIEW_LONG_EDGE,
         onClear: () => clearAll()
       });
     };
@@ -237,40 +209,9 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       };
     };
 
-    const setupRecorder = () => {
-      try {
-        const canvasStream = paper.captureStream(30);
-        const combinedStream = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...mediaStream.getAudioTracks()
-        ]);
-
-        const options = { mimeType: "video/webm;codecs=vp9" };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = "video/webm";
-          if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = "";
-        }
-
-        mediaRecorder = new MediaRecorder(combinedStream, options);
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) recordedChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          recordedChunks = [];
-        };
-      } catch (error) {
-        console.error("Erreur recorder", error);
-      }
-    };
-
     const startAudio = async () => {
       try {
         await startMicrophone();
-        mediaStream = audioRef.current.stream;
-        audioCtxRef.current = audioRef.current.ctx;
-        setupRecorder();
         document.getElementById("boot-screen").classList.add("hidden");
         loop();
       } catch (error) {
@@ -283,73 +224,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       resetTouch();
     };
 
-    const pushCycle = (cycle) => {
-      updateCycles((prev) => {
-        const next = [...prev, cycle];
-        if (next.length > MAX_CYCLES) {
-          const removed = next.shift();
-          sampler.cleanupCycleAssets(removed);
-        }
-        cyclesRef.current = next;
-        return next;
-      });
-    };
-
-    const updateCycleSelection = (id, selected) => {
-      updateCycles((prev) => {
-        const next = prev.map((cycle) => (cycle.id === id ? { ...cycle, selected } : cycle));
-        cyclesRef.current = next;
-        return next;
-      });
-    };
-
-    const deleteCycle = (id) => {
-      updateCycles((prev) => {
-        const next = prev.filter((cycle) => {
-          if (cycle.id === id) sampler.cleanupCycleAssets(cycle);
-          return cycle.id !== id;
-        });
-        cyclesRef.current = next;
-        return next;
-      });
-    };
-
-    const clearGallery = () => {
-      updateCycles((prev) => {
-        prev.forEach((cycle) => sampler.cleanupCycleAssets(cycle));
-        cyclesRef.current = [];
-        return [];
-      });
-    };
-
-    const registerCycle = async () => {
-      if (previewBusy) return;
-      previewBusy = true;
-      try {
-        cycleIndex += 1;
-        const snapshot = await createImageBitmap(paper);
-        const durationSeconds = Math.max(1, (timeLimitRef.current - remainingTimeRef.current) / 1000);
-        const cycle = {
-          id: `${Date.now()}_${cycleIndex}`,
-          duration: durationSeconds,
-          seed: Math.random(),
-          guide: { x: touchRef.current.x, y: touchRef.current.y },
-          audioData: {
-            bands: { ...audioRef.current.bands },
-            energy: { ...audioRef.current.energy }
-          },
-          snapshot,
-          preview: { avURL: "", imageURL: "" },
-          selected: false
-        };
-        await sampler.createPreviewImage(cycle);
-        await sampler.recordPreviewAV(cycle);
-        pushCycle(cycle);
-      } finally {
-        previewBusy = false;
-      }
-    };
-
     pointerDrawRef.current.draw = (from, to, dt) => {
       drawSpectralBrush(from.x, from.y, to.x, to.y, { dt, force: true });
     };
@@ -360,12 +234,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       startTimeRef.current = Date.now();
       remainingTimeRef.current = timeLimitRef.current;
       resetVoice();
-
-      if (mediaRecorder && mediaRecorder.state === "inactive") {
-        mediaRecorder.start();
-      } else if (mediaRecorder && mediaRecorder.state === "paused") {
-        mediaRecorder.resume();
-      }
 
       recDot.classList.add("active");
       mainBtn.style.display = "none";
@@ -383,24 +251,18 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     };
 
     const finishRitual = () => {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-
       if (audioMeter) audioMeter.classList.remove("active");
-      mainBtn.innerText = "Nouveau cycle";
+      mainBtn.innerText = "Recommencer";
       mainBtn.style.display = "block";
       stopBtn.style.display = "none";
       statusText.innerText = "Rituel Terminé";
       recDot.classList.remove("active");
       if (audioRef.current.ctx && audioRef.current.ctx.state === "suspended") audioRef.current.ctx.resume();
-      void registerCycle();
     };
 
     const resetRitual = () => {
       setPhase("READY");
       clearAll();
-      recordedChunks = [];
       resetVoice();
 
       mainBtn.innerText = "Peindre";
@@ -460,18 +322,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     resizeObserver.observe(canvasWrap);
     window.addEventListener("resize", resizeCanvas);
 
-    galleryActionsRef.current = {
-      updateCycleSelection,
-      deleteCycle,
-      clearGallery,
-      exportImageHD: sampler.exportImageHD,
-      exportCycleAV: sampler.exportCycleAV,
-      exportGlobalImage: sampler.exportGlobalImage,
-      exportGroupedAV: sampler.exportGroupedAV,
-      exportStopMotionGIF: sampler.exportStopMotionGIF,
-      exportZipBundle: sampler.exportZipBundle
-    };
-
     return () => {
       cleanupLayering();
 
@@ -482,20 +332,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
-
-      cyclesRef.current.forEach((cycle) => sampler.cleanupCycleAssets(cycle));
     };
   }, [
     audioRef,
     canvasRef,
     canvasWrapRef,
-    galleryActionsRef,
     resetTouch,
     setPhase,
     startMicrophone,
     timeLimitRef,
     startTimeRef,
-    remainingTimeRef,
-    updateCycles
+    remainingTimeRef
   ]);
 };
