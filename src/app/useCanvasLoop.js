@@ -82,7 +82,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const ctxP = paper.getContext("2d", { alpha: false });
 
-    let allowLayering = true;
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
@@ -92,8 +91,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     const recDot = document.getElementById("rec-dot");
     const audioMeter = document.getElementById("audio-meter");
     const specViz = document.getElementById("spectrum-viz");
-    const layeringToggle = document.getElementById("layering-toggle");
-    const layeringValue = document.getElementById("layering-value");
     const initBtn = document.getElementById("init-btn");
     const resetBtn = document.getElementById("reset-btn");
     const specLow = document.getElementById("spec-low");
@@ -207,19 +204,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       });
     };
 
-    const setupLayeringControl = () => {
-      const updateLayering = (checked) => {
-        allowLayering = checked;
-        layeringValue.textContent = checked ? "Superposer" : "Nettoyer";
-      };
-      const onToggle = (event) => updateLayering(event.target.checked);
-      layeringToggle.addEventListener("change", onToggle);
-      updateLayering(layeringToggle.checked);
-      return () => {
-        layeringToggle.removeEventListener("change", onToggle);
-      };
-    };
-
     const startAudio = async () => {
       try {
         await startMicrophone();
@@ -261,8 +245,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
 
-    const cleanupLayering = setupLayeringControl();
-
     setupControls();
     resizeCanvas();
     updateCycleStatus();
@@ -284,8 +266,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     };
 
     return () => {
-      cleanupLayering();
-
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
 

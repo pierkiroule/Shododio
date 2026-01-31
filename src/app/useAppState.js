@@ -5,8 +5,7 @@ export const useAppState = () => {
     brushes: true,
     inks: false,
     size: false,
-    opacity: false,
-    advanced: false
+    opacity: false
   });
 
   const toggleMenuSection = useCallback((section) => {

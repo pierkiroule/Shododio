@@ -34,28 +34,6 @@ export const AppControls = ({
           </div>
         </section>
 
-        <section className={`accordion-item ${menuSections.advanced ? "open" : ""}`}>
-          <button
-            className="accordion-trigger"
-            type="button"
-            onClick={() => toggleMenuSection("advanced")}
-          >
-            Réglages avancés
-            <span className="accordion-indicator">{menuSections.advanced ? "−" : "+"}</span>
-          </button>
-          <div className="accordion-panel">
-            <div className="minimal-controls">
-              <div className="control-block slider-block">
-                <div className="control-label">Superposition</div>
-                <label className="size-row toggle-row">
-                  <input id="layering-toggle" type="checkbox" defaultChecked />
-                  <span id="layering-value" className="size-value">Superposer</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section className="accordion-item open">
           <button className="accordion-trigger" type="button" disabled>
             Export
