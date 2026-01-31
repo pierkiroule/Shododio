@@ -26,8 +26,6 @@ export const AppCanvas = ({ canvasRef, canvasWrapRef }) => (
         </div>
 
         <div className="action-area">
-          <button id="main-btn" className="main-btn">Peindre</button>
-          <button id="stop-btn" className="main-btn secondary">Stop</button>
           <div className="action-controls">
             <button id="reset-btn" className="chip-btn" type="button">Reset</button>
           </div>

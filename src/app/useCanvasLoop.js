@@ -14,7 +14,7 @@ import { clamp } from "../utils/math";
 export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryActionsRef }) => {
   const uiRef = useRef({});
   const audioCtxRef = useRef(null);
-  const { phaseRef, startTimeRef, timeLimitRef, remainingTimeRef, setPhase } = useRitualState();
+  const { phaseRef, startTimeRef, setPhase } = useRitualState();
   const pointerDrawRef = useRef({
     draw: null,
     lastTime: 0
@@ -84,18 +84,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const ctxP = paper.getContext("2d", { alpha: false });
 
-    let mediaRecorder;
-    let recordedChunks = [];
-    let mediaStream;
     let allowLayering = true;
-    let previewBusy = false;
-    let cycleIndex = 0;
     let resizeObserver;
 
     const CANVAS_SCALE = 3;
     const PREVIEW_LONG_EDGE = 360;
     const PREVIEW_FPS = 20;
-    const MAX_CYCLES = 5;
     const SILENCE_THRESHOLD = 0.01;
 
     const previewCanvas = document.createElement("canvas");
@@ -113,7 +107,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const cyclesRef = { current: [] };
 
-    const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
     const audioMeter = document.getElementById("audio-meter");
@@ -122,13 +115,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     const layeringValue = document.getElementById("layering-value");
     const initBtn = document.getElementById("init-btn");
     const resetBtn = document.getElementById("reset-btn");
-    const stopBtn = document.getElementById("stop-btn");
     const specLow = document.getElementById("spec-low");
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
 
     uiRef.current = {
-      mainBtn,
       statusText,
       recDot,
       audioMeter,
@@ -227,7 +218,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     };
 
     const updateCycleStatus = () => {
-      statusText.innerText = "Prêt à écouter";
+      statusText.innerText = phaseRef.current === "DRAWING" ? "Micro actif" : "Prêt à écouter";
     };
 
     const setupControls = () => {
@@ -292,42 +283,17 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       };
     };
 
-    const setupRecorder = () => {
-      try {
-        const canvasStream = paper.captureStream(30);
-        const combinedStream = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...mediaStream.getAudioTracks()
-        ]);
-
-        const options = { mimeType: "video/webm;codecs=vp9" };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options.mimeType = "video/webm";
-          if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = "";
-        }
-
-        mediaRecorder = new MediaRecorder(combinedStream, options);
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) recordedChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          recordedChunks = [];
-        };
-      } catch (error) {
-        console.error("Erreur recorder", error);
-      }
-    };
-
     const startAudio = async () => {
       try {
         await startMicrophone();
-        mediaStream = audioRef.current.stream;
         audioCtxRef.current = audioRef.current.ctx;
-        setupRecorder();
         document.getElementById("boot-screen").classList.add("hidden");
-        loop();
+        setPhase("DRAWING");
+        startTimeRef.current = Date.now();
+        if (audioMeter) audioMeter.classList.add("active");
+        if (specViz) specViz.style.opacity = 1;
+        if (recDot) recDot.classList.add("active");
+        if (statusText) statusText.innerText = "Micro actif";
       } catch (error) {
         console.error(error);
         alert("Micro requis.");
@@ -336,18 +302,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
     const resetVoice = () => {
       resetTouch();
-    };
-
-    const pushCycle = (cycle) => {
-      updateCycles((prev) => {
-        const next = [...prev, cycle];
-        if (next.length > MAX_CYCLES) {
-          const removed = next.shift();
-          sampler.cleanupCycleAssets(removed);
-        }
-        cyclesRef.current = next;
-        return next;
-      });
     };
 
     const updateCycleSelection = (id, selected) => {
@@ -377,107 +331,16 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       });
     };
 
-    const registerCycle = async () => {
-      if (previewBusy) return;
-      previewBusy = true;
-      try {
-        cycleIndex += 1;
-        const snapshot = await createImageBitmap(paper);
-        const durationSeconds = Math.max(1, (timeLimitRef.current - remainingTimeRef.current) / 1000);
-        const cycle = {
-          id: `${Date.now()}_${cycleIndex}`,
-          duration: durationSeconds,
-          seed: Math.random(),
-          guide: { x: touchRef.current.x, y: touchRef.current.y },
-          audioData: {
-            bands: { ...audioRef.current.bands },
-            energy: { ...audioRef.current.energy }
-          },
-          snapshot,
-          preview: { avURL: "", imageURL: "" },
-          selected: false
-        };
-        await sampler.createPreviewImage(cycle);
-        await sampler.recordPreviewAV(cycle);
-        pushCycle(cycle);
-      } finally {
-        previewBusy = false;
-      }
-    };
-
     pointerDrawRef.current.draw = (from, to, dt) => {
       drawSpectralBrush(from.x, from.y, to.x, to.y, { dt });
     };
 
-    const startDrawingCycle = () => {
-      setPhase("DRAWING");
-      timeLimitRef.current = 10000;
-      startTimeRef.current = Date.now();
-      remainingTimeRef.current = timeLimitRef.current;
-      resetVoice();
-
-      if (mediaRecorder && mediaRecorder.state === "inactive") {
-        mediaRecorder.start();
-      } else if (mediaRecorder && mediaRecorder.state === "paused") {
-        mediaRecorder.resume();
-      }
-
-      recDot.classList.add("active");
-      mainBtn.style.display = "none";
-      stopBtn.style.display = "inline-flex";
-      if (audioMeter) audioMeter.classList.add("active");
-      if (specViz) specViz.style.opacity = 1;
-      statusText.innerText = "Voix en peinture...";
-
-      if (audioRef.current.ctx && audioRef.current.ctx.state === "suspended") audioRef.current.ctx.resume();
-    };
-
-    const startCycle = () => {
-      if (!allowLayering) clearAll();
-      startDrawingCycle();
-    };
-
-    const finishRitual = () => {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-
-      if (audioMeter) audioMeter.classList.remove("active");
-      mainBtn.innerText = "Nouveau cycle";
-      mainBtn.style.display = "block";
-      stopBtn.style.display = "none";
-      statusText.innerText = "Rituel Terminé";
-      recDot.classList.remove("active");
-      if (audioRef.current.ctx && audioRef.current.ctx.state === "suspended") audioRef.current.ctx.resume();
-      void registerCycle();
-    };
-
     const resetRitual = () => {
-      setPhase("READY");
+      setPhase("DRAWING");
       clearAll();
-      recordedChunks = [];
       resetVoice();
-
-      mainBtn.innerText = "Peindre";
-      mainBtn.style.display = "block";
-      stopBtn.style.display = "none";
-
-      if (audioMeter) audioMeter.classList.remove("active");
+      startTimeRef.current = Date.now();
       updateCycleStatus();
-      recDot.classList.remove("active");
-    };
-
-    const loop = () => {
-      if (phaseRef.current === "DRAWING") {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingTimeRef.current = Math.max(0, timeLimitRef.current - elapsed);
-
-        if (remainingTimeRef.current <= 0) {
-          setPhase("FINISHED");
-          finishRitual();
-        }
-      }
-      requestAnimationFrame(loop);
     };
 
     const onInitClick = () => {
@@ -488,21 +351,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
       }
     };
 
-    const onMainClick = () => {
-      if (phaseRef.current === "READY" || phaseRef.current === "FINISHED") startCycle();
-    };
-
-    const onStop = () => {
-      if (phaseRef.current === "DRAWING") {
-        setPhase("FINISHED");
-        finishRitual();
-      }
-    };
-
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
-    mainBtn.addEventListener("click", onMainClick);
-    stopBtn.addEventListener("click", onStop);
 
     const cleanupLayering = setupLayeringControl();
 
@@ -532,8 +382,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
 
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
-      mainBtn.removeEventListener("click", onMainClick);
-      stopBtn.removeEventListener("click", onStop);
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
@@ -548,9 +396,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     resetTouch,
     setPhase,
     startMicrophone,
-    timeLimitRef,
     startTimeRef,
-    remainingTimeRef,
     updateCycles
   ]);
 };
