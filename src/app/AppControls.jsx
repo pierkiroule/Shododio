@@ -12,14 +12,14 @@ export const AppControls = ({
             type="button"
             onClick={() => toggleMenuSection("brushes")}
           >
-            Brosse audioreactive
+            Motif du bout de brosse
             <span className="accordion-indicator">{menuSections.brushes ? "−" : "+"}</span>
           </button>
           <div className="accordion-panel">
             <div className="brush-legend">
               <div className="brush-name">Brosse unique : Rituel</div>
               <div className="brush-grammar">
-                Énergie → taille • Basses → eau • Médiums → grain • Aigus → filaments • Pics → éclats
+                Choisissez le motif du bout : griffes, auréoles ou classique
               </div>
             </div>
             <div id="brush-effects" className="option-row compact"></div>

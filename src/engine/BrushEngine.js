@@ -122,22 +122,6 @@ const addGranulation = (ctx, cx, cy, size, rgb, intensity, rand) => {
   ctx.restore();
 };
 
-const addSplatter = (ctx, cx, cy, intensity, rgb, rand) => {
-  const drops = Math.ceil(8 * intensity);
-  const splashRgb = mixColor(rgb, paperRgb, 0.3 + intensity * 0.2);
-  for (let i = 0; i < drops; i += 1) {
-    const a = rand() * Math.PI * 2;
-    const r = 10 + rand() * 30 * intensity;
-    const x = cx + Math.cos(a) * r;
-    const y = cy + Math.sin(a) * r;
-    const s = 0.8 + rand() * 2.6 * intensity;
-    ctx.fillStyle = rgba(splashRgb, 0.32 * intensity);
-    ctx.beginPath();
-    ctx.arc(x, y, s, 0, Math.PI * 2);
-    ctx.fill();
-  }
-};
-
 const addWetTrace = (ctx, cx, cy, size, rgb, intensity, dirX, dirY, rand) => {
   const traceColor = mixColor(rgb, paperRgb, 0.4 + intensity * 0.2);
   const len = size * (0.8 + intensity * 0.6);
@@ -156,6 +140,53 @@ const addWetTrace = (ctx, cx, cy, size, rgb, intensity, dirX, dirY, rand) => {
   ctx.beginPath();
   ctx.ellipse(tx, ty, w, len * 0.6, Math.atan2(dirY, dirX), 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+};
+
+/* ---------- Motifs de bout ---------- */
+const addClawMarks = (ctx, cx, cy, size, rgb, alpha, dirX, dirY, nx, ny, rand, energy) => {
+  const count = 3 + Math.round(rand() * 3);
+  const length = size * (0.8 + energy * 1.4);
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.strokeStyle = rgba(rgb, alpha * 1.2);
+  for (let i = 0; i < count; i += 1) {
+    const spread = (rand() - 0.5) * size * 0.9;
+    const angle = (rand() - 0.5) * 0.6;
+    const dx = nx * spread;
+    const dy = ny * spread;
+    const rx = dirX * Math.cos(angle) - dirY * Math.sin(angle);
+    const ry = dirX * Math.sin(angle) + dirY * Math.cos(angle);
+    const clawLen = length * (0.6 + rand() * 0.6);
+    ctx.lineWidth = 0.35 + rand() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(cx + dx, cy + dy);
+    ctx.lineTo(cx + dx + rx * clawLen, cy + dy + ry * clawLen);
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
+const addAuraRings = (ctx, cx, cy, size, rgb, intensity, rand, layers = 2) => {
+  const tint = mixColor(rgb, paperRgb, 0.25);
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  for (let i = 0; i < layers; i += 1) {
+    const radius = size * (1.1 + i * 0.45 + rand() * 0.3);
+    ctx.strokeStyle = rgba(tint, 0.08 * intensity);
+    ctx.lineWidth = 0.4 + rand() * 0.7;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      cy,
+      radius * (0.9 + rand() * 0.2),
+      radius * (0.7 + rand() * 0.2),
+      rand() * Math.PI,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+  }
   ctx.restore();
 };
 
@@ -188,16 +219,13 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
   const dirY = dist ? (by - ay) / dist : 0;
   const nx = -dirY;
   const ny = dirX;
-  const speed = dist / Math.max(dt, 1);
-
   const wetness = Number.isFinite(safeBrush.wetness) ? safeBrush.wetness : 0.6;
   const baseSize = Number.isFinite(safeBrush.baseSize) ? safeBrush.baseSize : 12;
   const jitterBase = Number.isFinite(safeBrush.jitter) ? safeBrush.jitter : 0.25;
   const flow = clamp(Number.isFinite(safeBrush.flow) ? safeBrush.flow : 1, 0, 2);
-  const bristles = Math.max(0, Number.isFinite(safeBrush.bristles) ? safeBrush.bristles : 0);
   const grain = clamp(Number.isFinite(safeBrush.grain) ? safeBrush.grain : 0.35, 0, 1);
-  const spread = Number.isFinite(safeBrush.spread) ? safeBrush.spread : 0.9;
   const id = safeBrush.id ?? "default";
+  const tipPattern = safeBrush.tipPattern ?? "classic";
   const haloOnly = id === "halo";
 
   const low = clamp(Number.isFinite(safeDrive.low) ? safeDrive.low : 0, 0, 1);
@@ -209,51 +237,61 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
   const dryness = clamp(1.1 - wateriness + high * 0.5, 0.1, 1.3);
   const audioDamping = 1 - clamp(energy * 0.45 + high * 0.25 + mid * 0.15, 0, 0.6);
   const size = baseSize * (0.6 + energy * 1.2) * (0.6 + mid * 0.6) * audioDamping;
-  const jitter = jitterBase * (1 + high * 4 + energy * 3) * size;
+  const jitter = jitterBase * (1 + high * 2 + energy * 2) * size;
 
   const inkDeep = getInkDepth(safeInk, flow);
+  const washInk = mixColor(safeInk, paperRgb, 0.45 + wateriness * 0.15);
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  const points = [];
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
-    const cx = ax + (bx - ax) * t + (rand() - 0.5) * jitter;
-    const cy = ay + (by - ay) * t + (rand() - 0.5) * jitter;
+    points.push({
+      x: ax + (bx - ax) * t + (rand() - 0.5) * jitter,
+      y: ay + (by - ay) * t + (rand() - 0.5) * jitter
+    });
+  }
 
-    const alpha = (0.05 + mid * 0.25 + energy * 0.2) * flow;
-    const lw = size * (0.25 + energy * 0.9);
-    const seg = Math.max(2, size * 0.6);
+  const alpha = (0.08 + mid * 0.28 + energy * 0.22) * flow;
+  const lw = size * (0.35 + energy * 0.75);
 
-    if (!haloOnly) {
-      ctx.strokeStyle = rgba(inkDeep, alpha);
-      ctx.lineWidth = lw;
-      ctx.beginPath();
-      ctx.moveTo(cx - dirX * seg * 0.3, cy - dirY * seg * 0.3);
-      ctx.lineTo(cx + dirX * seg, cy + dirY * seg);
-      ctx.stroke();
+  const path = new Path2D();
+  if (points.length > 0) {
+    path.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const midX = (prev.x + curr.x) / 2;
+      const midY = (prev.y + curr.y) / 2;
+      path.quadraticCurveTo(prev.x, prev.y, midX, midY);
     }
+    const last = points[points.length - 1];
+    path.lineTo(last.x, last.y);
+  }
 
-    if (!haloOnly && bristles > 0) {
-      const count = Math.round(bristles * (0.7 + high * 0.6));
-      for (let j = 0; j < count; j += 1) {
-        if (rand() < grain * 0.25 * dryness) continue;
-        const off = (rand() - 0.5) * spread * size;
-        const mx = cx + nx * off;
-        const my = cy + ny * off;
-        const len = (2 + rand() * 6 + speed * 0.8) * (0.6 + energy * 0.8);
-        const w = (0.2 + rand() * 0.6) * (0.6 + energy * 0.6);
-        ctx.strokeStyle = rgba(inkDeep, alpha * (0.5 + rand() * 0.6));
-        ctx.lineWidth = w;
-        ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(mx + dirX * len, my + dirY * len);
-        ctx.stroke();
-      }
-    }
+  if (!haloOnly) {
+    ctx.strokeStyle = rgba(inkDeep, alpha);
+    ctx.lineWidth = lw;
+    ctx.stroke(path);
 
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.strokeStyle = rgba(washInk, 0.08 + wateriness * 0.12);
+    ctx.lineWidth = lw * (1.6 + wateriness * 0.4);
+    ctx.stroke(path);
+    ctx.strokeStyle = rgba(washInk, 0.05 + wateriness * 0.08);
+    ctx.lineWidth = lw * (2.4 + wateriness * 0.6);
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
+  const accentStep = Math.max(1, Math.floor(points.length / 6));
+  for (let i = 0; i < points.length; i += accentStep) {
+    const { x: cx, y: cy } = points[i];
     if (haloOnly) {
       const haloSize = size * (1.4 + wateriness * 0.6);
       const haloIntensity = clamp(0.7 + wateriness * 0.4 + low * 0.2, 0, 1.6);
@@ -263,27 +301,29 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
       addDryEdge(ctx, cx, cy, haloSize * 0.85, inkDeep, clamp(dryness + 0.35, 0.1, 1.4), rand);
       addGranulation(ctx, cx, cy, haloSize * 0.8, safeInk, clamp(grain * 1.2 + 0.2, 0, 1.6), rand);
     } else {
-      if (rand() < 0.18 * (0.4 + wateriness)) {
-        addWaterHalo(ctx, cx, cy, size * 1.3, safeInk, 0.4 + wateriness * 0.4, rand);
-      }
-      if (rand() < 0.14 * (0.3 + wateriness)) {
+      addWaterHalo(ctx, cx, cy, size * 1.3, safeInk, 0.4 + wateriness * 0.4, rand);
+      if (rand() < 0.45) {
         addStain(ctx, cx, cy, size * 1.4, safeInk, 0.35 + wateriness * 0.35, rand);
       }
-      if (rand() < 0.1 * dryness) {
-        addDryEdge(ctx, cx, cy, size * 1.1, inkDeep, dryness, rand);
-      }
-      if (rand() < 0.18 * (0.3 + grain)) {
+      addDryEdge(ctx, cx, cy, size * 1.05, inkDeep, dryness, rand);
+      if (rand() < 0.6) {
         addGranulation(ctx, cx, cy, size * 1.1, safeInk, (grain + high) * 0.9, rand);
       }
-    }
-
-    if (!haloOnly) {
-      const splash = Math.max(high, energy);
-      if (splash > 0.25 && rand() < 0.06) {
-        addSplatter(ctx, cx, cy, splash, safeInk, rand);
+      if (tipPattern === "claws") {
+        addClawMarks(ctx, cx, cy, size, inkDeep, alpha, dirX, dirY, nx, ny, rand, energy);
       }
-      if (rand() < 0.12 * wateriness) {
-        addWetTrace(ctx, cx, cy, size * 1.2, safeInk, wateriness, dirX, dirY, rand);
+      if (tipPattern === "halo") {
+        addAuraRings(ctx, cx, cy, size * (1 + wateriness * 0.2), safeInk, 0.9 + wateriness * 0.4, rand, 2);
+        addWaterHalo(ctx, cx, cy, size * 1.5, safeInk, 0.55 + wateriness * 0.35, rand);
+      }
+      if (tipPattern === "halo-complex") {
+        addAuraRings(ctx, cx, cy, size * (1.1 + wateriness * 0.3), safeInk, 1.1 + wateriness * 0.5, rand, 4);
+        addWaterHalo(ctx, cx, cy, size * 1.7, safeInk, 0.6 + wateriness * 0.4, rand);
+        addStain(ctx, cx, cy, size * 1.6, safeInk, 0.6 + wateriness * 0.4, rand);
+        addGranulation(ctx, cx, cy, size * 1.2, safeInk, clamp(grain * 1.4 + 0.3, 0, 1.8), rand);
+      }
+      if (rand() < 0.5 * wateriness) {
+        addWetTrace(ctx, cx, cy, size * 1.1, safeInk, wateriness, dirX, dirY, rand);
       }
     }
   }
