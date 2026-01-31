@@ -26,8 +26,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     draw: null,
     lastTime: 0
   });
-  const strokesRef = useRef([]);
-  const animationRef = useRef({ frameId: null, lastTime: 0 });
   const smoothDriveRef = useRef({ energy: 0, low: 0, mid: 0, high: 0, peak: 0 });
   const onPointerDown = useCallback((point) => {
     if (phaseRef.current !== "DRAWING") return;
@@ -97,7 +95,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     let resizeObserver;
 
-    const CANVAS_SCALE = 3;
+    const CANVAS_SCALE = Math.min(2, window.devicePixelRatio || 1);
     const SILENCE_THRESHOLD = 0.01;
 
     const statusText = document.getElementById("status-text");
@@ -224,19 +222,14 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       };
     };
 
-    const storeStrokeSegment = ({ from, to, ink, brush, drive }) => {
-      const seed = Math.floor(Math.random() * 1e9);
-      strokesRef.current.push({
-        from,
-        to,
+    const bakeStroke = ({ from, to, ink, brush, drive, seed, dt }) => {
+      drawBrush(baseCtx, from, to, {
         ink,
         brush,
         drive,
+        dt,
         seed
       });
-      if (strokesRef.current.length > 6000) {
-        strokesRef.current.shift();
-      }
     };
 
     const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {
@@ -269,12 +262,14 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
           dt
         }
       );
-      storeStrokeSegment({
+      bakeStroke({
         from: { x: x1, y: y1 },
         to: { x: x2, y: y2 },
         ink: adjustedInk,
         brush: baseBrush,
-        drive: baseDrive
+        drive: baseDrive,
+        dt,
+        seed: Math.floor(Math.random() * 1e9)
       });
     };
 
@@ -356,37 +351,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     const resetRitual = () => {
       clearAll();
-      strokesRef.current = [];
       smoothDriveRef.current = { energy: 0, low: 0, mid: 0, high: 0, peak: 0 };
       resetVoice();
 
       updateCycleStatus(phaseRef.current === "DRAWING" ? "Voix en peinture..." : "Prêt à écouter");
-    };
-
-    const renderFrame = (time) => {
-      const frameDt = time - (animationRef.current.lastTime || time);
-      animationRef.current.lastTime = time;
-
-      ctxP.drawImage(baseCanvas, 0, 0);
-
-      const segments = strokesRef.current;
-      if (segments.length > 0) {
-        const liveDrive = smoothDrive(getLiveDrive(), frameDt);
-        const livePeak = liveDrive.peak;
-        segments.forEach((segment) => {
-          const blendedDrive = blendDrive(segment.drive, liveDrive);
-          const { brush, drive } = applyAudioGrammar(segment.brush, blendedDrive, livePeak);
-          drawBrush(ctxP, segment.from, segment.to, {
-            ink: segment.ink,
-            brush,
-            drive,
-            dt: frameDt,
-            seed: segment.seed
-          });
-        });
-      }
-
-      animationRef.current.frameId = requestAnimationFrame(renderFrame);
     };
 
     const onInitClick = () => {
@@ -404,7 +372,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
     resizeCanvas();
     updateCycleStatus();
     resetVoice();
-    animationRef.current.frameId = requestAnimationFrame(renderFrame);
 
     resizeObserver = new ResizeObserver(() => resizeCanvas());
     resizeObserver.observe(canvasWrap);
@@ -427,9 +394,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
-      if (animationRef.current.frameId) {
-        cancelAnimationFrame(animationRef.current.frameId);
-      }
     };
   }, [
     audioRef,

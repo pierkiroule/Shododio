@@ -182,7 +182,7 @@ export const drawBrush = (ctx, a, b, { ink, brush, drive, dt = 16, seed } = {}) 
   const by = b.y ?? b[1];
 
   const dist = Math.hypot(bx - ax, by - ay);
-  const steps = Math.min(120, Math.max(1, Math.floor(dist)));
+  const steps = Math.min(90, Math.max(1, Math.floor(dist)));
 
   const dirX = dist ? (bx - ax) / dist : 0;
   const dirY = dist ? (by - ay) / dist : 0;
