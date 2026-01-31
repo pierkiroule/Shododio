@@ -45,6 +45,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   --canvas-zoom: 1;
+  touch-action: none;
 }
 
 canvas {
