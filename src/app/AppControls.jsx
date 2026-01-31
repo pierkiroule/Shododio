@@ -1,6 +1,7 @@
 export const AppControls = ({
   menuSections,
-  toggleMenuSection
+  toggleMenuSection,
+  onExportImage
 }) => (
   <>
     <div className="tools-area">
@@ -52,6 +53,17 @@ export const AppControls = ({
                 </label>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="accordion-item open">
+          <button className="accordion-trigger" type="button" disabled>
+            Export
+          </button>
+          <div className="accordion-panel">
+            <button className="chip-btn" type="button" onClick={onExportImage}>
+              Exporter PNG HD
+            </button>
           </div>
         </section>
       </div>

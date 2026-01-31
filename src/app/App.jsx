@@ -7,12 +7,14 @@ import { useCanvasLoop } from "./useCanvasLoop";
 const App = () => {
   const canvasRef = useRef(null);
   const canvasWrapRef = useRef(null);
+  const exportActionsRef = useRef({});
 
   const { menuSections, toggleMenuSection } = useAppState();
 
   useCanvasLoop({
     canvasRef,
-    canvasWrapRef
+    canvasWrapRef,
+    exportActionsRef
   });
 
   return (
@@ -28,6 +30,7 @@ const App = () => {
       <AppControls
         menuSections={menuSections}
         toggleMenuSection={toggleMenuSection}
+        onExportImage={() => exportActionsRef.current.exportImageHD?.()}
       />
     </div>
   );

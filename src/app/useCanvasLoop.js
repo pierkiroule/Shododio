@@ -10,7 +10,16 @@ import { useRitualState } from "../ritual/useRitualState";
 import { mixColor, paperRgb } from "../utils/color";
 import { clamp } from "../utils/math";
 
-export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) => {
   const uiRef = useRef({});
   const { phaseRef, setPhase } = useRitualState();
   const pointerDrawRef = useRef({
@@ -18,13 +27,14 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     lastTime: 0
   });
   const onPointerDown = useCallback((point) => {
+    if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
     pointerDrawRef.current.lastTime = now;
     pointerDrawRef.current.lastPoint = point;
     pointerDrawRef.current.draw?.(point, point, 0);
-  }, []);
+  }, [phaseRef]);
   const onPointerMove = useCallback((from, to) => {
-    if (phaseRef.current !== "DRAWING" && phaseRef.current !== "READY") return;
+    if (phaseRef.current !== "DRAWING") return;
     const now = performance.now();
     const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
     pointerDrawRef.current.lastTime = now;
@@ -78,7 +88,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     const CANVAS_SCALE = 3;
     const SILENCE_THRESHOLD = 0.01;
 
-    const mainBtn = document.getElementById("main-btn");
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
     const audioMeter = document.getElementById("audio-meter");
@@ -92,7 +101,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     const specHigh = document.getElementById("spec-high");
 
     uiRef.current = {
-      mainBtn,
       statusText,
       recDot,
       audioMeter,
@@ -104,10 +112,14 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
 
     const clearAll = () => clearPaper(ctxP, paper.width, paper.height);
 
+    const exportCanvas = document.createElement("canvas");
+    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
+
     const resizeCanvas = () => {
       resizePaper({
         paper,
         canvasWrap,
+        exportCanvas,
         canvasScale: CANVAS_SCALE,
         onClear: () => clearAll()
       });
@@ -151,8 +163,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       );
     };
 
-    const updateCycleStatus = () => {
-      statusText.innerText = "Prêt à écouter";
+    const updateCycleStatus = (label = "Prêt à écouter") => {
+      statusText.innerText = label;
     };
 
     const setupControls = () => {
@@ -212,6 +224,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       try {
         await startMicrophone();
         document.getElementById("boot-screen").classList.add("hidden");
+        setPhase("DRAWING");
+        recDot.classList.add("active");
+        if (audioMeter) audioMeter.classList.add("active");
+        if (specViz) specViz.style.opacity = 1;
+        statusText.innerText = "Voix en peinture...";
       } catch (error) {
         console.error(error);
         alert("Micro requis.");
@@ -226,36 +243,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       drawSpectralBrush(from.x, from.y, to.x, to.y, { dt, force: true });
     };
 
-    const startDrawingCycle = () => {
-      setPhase("DRAWING");
-      resetVoice();
-
-      recDot.classList.add("active");
-      mainBtn.disabled = true;
-      if (audioMeter) audioMeter.classList.add("active");
-      if (specViz) specViz.style.opacity = 1;
-      statusText.innerText = "Voix en peinture...";
-
-      if (audioRef.current.ctx && audioRef.current.ctx.state === "suspended") audioRef.current.ctx.resume();
-    };
-
-    const startCycle = () => {
-      if (!allowLayering) clearAll();
-      startDrawingCycle();
-    };
-
     const resetRitual = () => {
-      setPhase("READY");
       clearAll();
       resetVoice();
 
-      mainBtn.innerText = "Peindre";
-      mainBtn.style.display = "block";
-      mainBtn.disabled = false;
-
-      if (audioMeter) audioMeter.classList.remove("active");
-      updateCycleStatus();
-      recDot.classList.remove("active");
+      updateCycleStatus(phaseRef.current === "DRAWING" ? "Voix en peinture..." : "Prêt à écouter");
     };
 
     const onInitClick = () => {
@@ -266,13 +258,8 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       }
     };
 
-    const onMainClick = () => {
-      if (phaseRef.current === "READY") startCycle();
-    };
-
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
-    mainBtn.addEventListener("click", onMainClick);
 
     const cleanupLayering = setupLayeringControl();
 
@@ -285,12 +272,22 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     resizeObserver.observe(canvasWrap);
     window.addEventListener("resize", resizeCanvas);
 
+    exportActionsRef.current = {
+      exportImageHD: () => {
+        exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+        exportCtx.drawImage(paper, 0, 0, exportCanvas.width, exportCanvas.height);
+        exportCanvas.toBlob((blob) => {
+          if (!blob) return;
+          downloadBlob(blob, "shodo.png");
+        }, "image/png");
+      }
+    };
+
     return () => {
       cleanupLayering();
 
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
-      mainBtn.removeEventListener("click", onMainClick);
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
@@ -299,6 +296,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     audioRef,
     canvasRef,
     canvasWrapRef,
+    exportActionsRef,
     resetTouch,
     setPhase,
     startMicrophone

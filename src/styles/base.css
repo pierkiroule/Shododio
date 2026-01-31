@@ -358,20 +358,6 @@ canvas {
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink);
 }
 
-.main-btn {
-  padding: 12px 28px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--bg);
-  letter-spacing: 0.15em;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.3s;
-  min-width: 180px;
-}
-
-
 .toggle-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
