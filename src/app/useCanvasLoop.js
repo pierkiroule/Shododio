@@ -12,7 +12,7 @@ import { clamp } from "../utils/math";
 
 export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
   const uiRef = useRef({});
-  const { phaseRef, startTimeRef, timeLimitRef, remainingTimeRef, setPhase } = useRitualState();
+  const { phaseRef, setPhase } = useRitualState();
   const pointerDrawRef = useRef({
     draw: null,
     lastTime: 0
@@ -87,7 +87,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     const layeringValue = document.getElementById("layering-value");
     const initBtn = document.getElementById("init-btn");
     const resetBtn = document.getElementById("reset-btn");
-    const stopBtn = document.getElementById("stop-btn");
     const specLow = document.getElementById("spec-low");
     const specMid = document.getElementById("spec-mid");
     const specHigh = document.getElementById("spec-high");
@@ -213,7 +212,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       try {
         await startMicrophone();
         document.getElementById("boot-screen").classList.add("hidden");
-        loop();
       } catch (error) {
         console.error(error);
         alert("Micro requis.");
@@ -230,14 +228,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
 
     const startDrawingCycle = () => {
       setPhase("DRAWING");
-      timeLimitRef.current = 10000;
-      startTimeRef.current = Date.now();
-      remainingTimeRef.current = timeLimitRef.current;
       resetVoice();
 
       recDot.classList.add("active");
-      mainBtn.style.display = "none";
-      stopBtn.style.display = "inline-flex";
+      mainBtn.disabled = true;
       if (audioMeter) audioMeter.classList.add("active");
       if (specViz) specViz.style.opacity = 1;
       statusText.innerText = "Voix en peinture...";
@@ -250,16 +244,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       startDrawingCycle();
     };
 
-    const finishRitual = () => {
-      if (audioMeter) audioMeter.classList.remove("active");
-      mainBtn.innerText = "Recommencer";
-      mainBtn.style.display = "block";
-      stopBtn.style.display = "none";
-      statusText.innerText = "Rituel Terminé";
-      recDot.classList.remove("active");
-      if (audioRef.current.ctx && audioRef.current.ctx.state === "suspended") audioRef.current.ctx.resume();
-    };
-
     const resetRitual = () => {
       setPhase("READY");
       clearAll();
@@ -267,24 +251,11 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
 
       mainBtn.innerText = "Peindre";
       mainBtn.style.display = "block";
-      stopBtn.style.display = "none";
+      mainBtn.disabled = false;
 
       if (audioMeter) audioMeter.classList.remove("active");
       updateCycleStatus();
       recDot.classList.remove("active");
-    };
-
-    const loop = () => {
-      if (phaseRef.current === "DRAWING") {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingTimeRef.current = Math.max(0, timeLimitRef.current - elapsed);
-
-        if (remainingTimeRef.current <= 0) {
-          setPhase("FINISHED");
-          finishRitual();
-        }
-      }
-      requestAnimationFrame(loop);
     };
 
     const onInitClick = () => {
@@ -296,20 +267,12 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     };
 
     const onMainClick = () => {
-      if (phaseRef.current === "READY" || phaseRef.current === "FINISHED") startCycle();
-    };
-
-    const onStop = () => {
-      if (phaseRef.current === "DRAWING") {
-        setPhase("FINISHED");
-        finishRitual();
-      }
+      if (phaseRef.current === "READY") startCycle();
     };
 
     initBtn.addEventListener("click", onInitClick);
     resetBtn.addEventListener("click", resetRitual);
     mainBtn.addEventListener("click", onMainClick);
-    stopBtn.addEventListener("click", onStop);
 
     const cleanupLayering = setupLayeringControl();
 
@@ -328,7 +291,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
       initBtn.removeEventListener("click", onInitClick);
       resetBtn.removeEventListener("click", resetRitual);
       mainBtn.removeEventListener("click", onMainClick);
-      stopBtn.removeEventListener("click", onStop);
 
       window.removeEventListener("resize", resizeCanvas);
       if (resizeObserver) resizeObserver.disconnect();
@@ -339,9 +301,6 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef }) => {
     canvasWrapRef,
     resetTouch,
     setPhase,
-    startMicrophone,
-    timeLimitRef,
-    startTimeRef,
-    remainingTimeRef
+    startMicrophone
   ]);
 };

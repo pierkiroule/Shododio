@@ -371,15 +371,6 @@ canvas {
   min-width: 180px;
 }
 
-.main-btn.secondary {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--ink);
-}
-
-#stop-btn {
-  display: none;
-}
 
 .toggle-row input[type="checkbox"] {
   width: 16px;
