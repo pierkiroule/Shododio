@@ -97,8 +97,10 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
 
     let resizeObserver;
 
-    const CANVAS_SCALE = 3;
+    const CANVAS_SCALE = Math.min(2, window.devicePixelRatio || 1);
     const SILENCE_THRESHOLD = 0.01;
+    const MAX_LIVE_SEGMENTS = 1200;
+    const BAKE_BATCH = 200;
 
     const statusText = document.getElementById("status-text");
     const recDot = document.getElementById("rec-dot");
@@ -224,6 +226,24 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       };
     };
 
+    const bakeSegments = () => {
+      const segments = strokesRef.current;
+      const overflow = segments.length - MAX_LIVE_SEGMENTS;
+      if (overflow <= 0) return;
+
+      const bakeCount = Math.min(BAKE_BATCH, overflow);
+      const baked = segments.splice(0, bakeCount);
+      baked.forEach((segment) => {
+        drawBrush(baseCtx, segment.from, segment.to, {
+          ink: segment.ink,
+          brush: segment.brush,
+          drive: segment.drive,
+          dt: 16,
+          seed: segment.seed
+        });
+      });
+    };
+
     const storeStrokeSegment = ({ from, to, ink, brush, drive }) => {
       const seed = Math.floor(Math.random() * 1e9);
       strokesRef.current.push({
@@ -237,6 +257,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, exportActionsRef }) =>
       if (strokesRef.current.length > 6000) {
         strokesRef.current.shift();
       }
+      bakeSegments();
     };
 
     const drawSpectralBrush = (x1, y1, x2, y2, { dt = 16, force = false } = {}) => {

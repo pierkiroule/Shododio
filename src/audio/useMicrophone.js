@@ -14,6 +14,8 @@ export const useMicrophone = ({ onSpectrum, onReady } = {}) => {
   });
   const rafRef = useRef(null);
   const lastPeakTimeRef = useRef(0);
+  const lastTickRef = useRef(0);
+  const TARGET_FPS = 30;
 
   const stopLoop = useCallback(() => {
     if (rafRef.current) {
@@ -24,6 +26,13 @@ export const useMicrophone = ({ onSpectrum, onReady } = {}) => {
 
   const startLoop = useCallback(() => {
     const loop = () => {
+      const now = performance.now();
+      if (now - lastTickRef.current < 1000 / TARGET_FPS) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+      lastTickRef.current = now;
+
       const audio = audioRef.current;
       if (!audio.analyser || !audio.data || !audio.timeData) {
         rafRef.current = requestAnimationFrame(loop);
