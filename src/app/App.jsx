@@ -5,16 +5,18 @@ const ENERGY_STEP = 2.6;
 const paletteColors = [
   { key: "obsidienne", name: "Obsidienne", color: "#1b2233" },
   { key: "vermilion", name: "Vermillon", color: "#cc5a3f" },
-  { key: "cendre", name: "Cendre", color: "#6b7c8f" }
+  { key: "cendre", name: "Cendre", color: "#6b7c8f" },
+  { key: "jade", name: "Jade", color: "#3f8b82" }
 ];
 
 const normalizePalette = (palette) => {
   const total = Object.values(palette).reduce((sum, value) => sum + value, 0);
   if (total <= 0) {
     return {
-      obsidienne: 40,
-      vermilion: 35,
-      cendre: 25
+      obsidienne: 35,
+      vermilion: 30,
+      cendre: 20,
+      jade: 15
     };
   }
   const factor = 100 / total;
@@ -28,6 +30,7 @@ const App = () => {
   const inkCanvasRef = useRef(null);
   const gestureCanvasRef = useRef(null);
   const animationRef = useRef(null);
+  const echoTimersRef = useRef([]);
   const audioPulseRef = useRef(0.2);
   const energyRef = useRef(40);
   const gesturePointsRef = useRef([]);
@@ -37,11 +40,13 @@ const App = () => {
   const [isLaunching, setIsLaunching] = useState(false);
   const [audioPulse, setAudioPulse] = useState(0.2);
   const [palette, setPalette] = useState({
-    obsidienne: 40,
-    vermilion: 35,
-    cendre: 25
+    obsidienne: 35,
+    vermilion: 30,
+    cendre: 20,
+    jade: 15
   });
-  const [gestureMetrics, setGestureMetrics] = useState({ points: 0, distance: 0 });
+  const [gestureMetrics, setGestureMetrics] = useState({ points: 0, distance: 0, speed: 0 });
+  const [lastRitual, setLastRitual] = useState(null);
 
   useEffect(() => {
     energyRef.current = energy;
@@ -56,7 +61,7 @@ const App = () => {
     const interval = window.setInterval(() => {
       tick += 0.2;
       const base = isCharging || isLaunching ? 0.35 : 0.15;
-      const pulse = base + Math.abs(Math.sin(tick)) * 0.4 + Math.random() * 0.2;
+      const pulse = base + Math.abs(Math.sin(tick)) * 0.45 + Math.random() * 0.2;
       setAudioPulse(pulse);
     }, 120);
     return () => window.clearInterval(interval);
@@ -103,6 +108,38 @@ const App = () => {
     }));
   }, [energy, palette]);
 
+  const hasGesture = gestureMetrics.points > 1;
+  const isReadyToLaunch = energy > 5 && hasGesture && !isLaunching;
+
+  const ritualSteps = useMemo(() => {
+    return [
+      {
+        key: "shout",
+        title: "Invoquer le cri",
+        description: "Maintenez pour charger l'énergie Kaï puis relâchez.",
+        status: isCharging ? "active" : energy > 5 ? "complete" : "pending"
+      },
+      {
+        key: "palette",
+        title: "Répartir l'énergie",
+        description: "Distribuez la charge sur la palette vivante.",
+        status: energy > 5 ? "active" : "pending"
+      },
+      {
+        key: "gesture",
+        title: "Poser le geste",
+        description: "Tracez un seul mouvement pour guider l'encre.",
+        status: hasGesture ? "complete" : "pending"
+      },
+      {
+        key: "launch",
+        title: "Projeter l'encre",
+        description: "Relâchez l'encre audioreactive asynchrone.",
+        status: isLaunching ? "active" : isReadyToLaunch ? "ready" : "pending"
+      }
+    ];
+  }, [energy, hasGesture, isCharging, isLaunching, isReadyToLaunch]);
+
   const clearGestureLayer = () => {
     const gestureCanvas = gestureCanvasRef.current;
     if (!gestureCanvas) return;
@@ -119,15 +156,23 @@ const App = () => {
 
   const computeGestureMetrics = (points) => {
     if (points.length < 2) {
-      return { points: points.length, distance: 0 };
+      return { points: points.length, distance: 0, speed: 0 };
     }
-    const distance = points.slice(1).reduce((acc, point, index) => {
+    let distance = 0;
+    let speedSum = 0;
+    points.slice(1).forEach((point, index) => {
       const prev = points[index];
       const dx = point.x - prev.x;
       const dy = point.y - prev.y;
-      return acc + Math.hypot(dx, dy);
-    }, 0);
-    return { points: points.length, distance: Math.round(distance) };
+      const stepDistance = Math.hypot(dx, dy);
+      distance += stepDistance;
+      speedSum += stepDistance;
+    });
+    return {
+      points: points.length,
+      distance: Math.round(distance),
+      speed: Math.round(speedSum / Math.max(1, points.length - 1))
+    };
   };
 
   const handlePointerDown = (event) => {
@@ -169,10 +214,13 @@ const App = () => {
     const ctx = gestureCanvas.getContext("2d");
     ctx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
     if (points.length < 2) return;
+    const gradient = ctx.createLinearGradient(points[0].x, points[0].y, points.at(-1).x, points.at(-1).y);
+    gradient.addColorStop(0, "rgba(27, 34, 51, 0.25)");
+    gradient.addColorStop(1, "rgba(197, 91, 61, 0.6)");
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(27, 34, 51, 0.35)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 2 + audioPulseRef.current * 2;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
@@ -184,13 +232,15 @@ const App = () => {
     setPalette(next);
   };
 
+  const cancelEchoes = () => {
+    echoTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    echoTimersRef.current = [];
+  };
+
   const handleLaunch = () => {
-    if (isLaunching) return;
-    const points = gesturePointsRef.current;
-    if (!points || points.length < 2) return;
-    if (energyRef.current <= 0) return;
+    if (!isReadyToLaunch) return;
     setIsLaunching(true);
-    animateInk(points);
+    animateInk(gesturePointsRef.current);
   };
 
   const animateInk = (points) => {
@@ -199,7 +249,7 @@ const App = () => {
     const ctx = inkCanvas.getContext("2d");
     let progress = 0;
     const totalSegments = points.length - 1;
-    const speed = Math.max(1, Math.floor(points.length / 80));
+    const speed = Math.max(1, Math.floor(points.length / 70));
     const paletteWeights = paletteColors.map((item) => palette[item.key]);
     const totalWeight = paletteWeights.reduce((sum, value) => sum + value, 0) || 1;
 
@@ -215,17 +265,17 @@ const App = () => {
       return paletteColors[0].color;
     };
 
-    const drawSplash = (point) => {
-      const droplets = Math.round(8 + energyRef.current / 10);
+    const drawSplash = (point, spread = 1) => {
+      const droplets = Math.round(6 + (energyRef.current / 12) * spread);
       for (let i = 0; i < droplets; i += 1) {
         const angle = Math.random() * Math.PI * 2;
-        const radius = Math.random() * 18;
+        const radius = Math.random() * 22 * spread;
         ctx.fillStyle = `${pickColor(Math.random())}55`;
         ctx.beginPath();
         ctx.arc(
           point.x + Math.cos(angle) * radius,
           point.y + Math.sin(angle) * radius,
-          Math.random() * 3 + 1,
+          Math.random() * 2.8 + 0.8,
           0,
           Math.PI * 2
         );
@@ -233,11 +283,38 @@ const App = () => {
       }
     };
 
+    const drawRipple = (point, size) => {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, size, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+
+    const scheduleEchoes = () => {
+      cancelEchoes();
+      const echoes = Math.min(10, Math.floor(points.length / 6));
+      for (let i = 0; i < echoes; i += 1) {
+        const timer = window.setTimeout(() => {
+          const point = points[Math.floor(Math.random() * points.length)];
+          drawSplash(point, 0.6);
+          drawRipple(point, 16 + Math.random() * 20);
+        }, 300 + i * 140 + Math.random() * 120);
+        echoTimersRef.current.push(timer);
+      }
+    };
+
     const step = () => {
       if (progress >= totalSegments) {
         setIsLaunching(false);
         setEnergy(0);
-        drawSplash(points[points.length - 1]);
+        drawSplash(points[points.length - 1], 1.4);
+        scheduleEchoes();
+        setLastRitual({
+          energy: Math.round(energyRef.current),
+          distance: gestureMetrics.distance,
+          palette: paletteWithEnergy
+        });
         return;
       }
       const pulse = audioPulseRef.current;
@@ -245,8 +322,8 @@ const App = () => {
         const start = points[progress];
         const end = points[progress + 1];
         const ratio = progress / totalSegments;
-        const weight = 6 + pulse * 6 + (energyRef.current / MAX_ENERGY) * 8;
-        const alpha = Math.round(140 + pulse * 90)
+        const weight = 4 + pulse * 6 + (energyRef.current / MAX_ENERGY) * 9;
+        const alpha = Math.round(120 + pulse * 100)
           .toString(16)
           .padStart(2, "0");
         ctx.strokeStyle = `${pickColor(ratio)}${alpha}`;
@@ -254,10 +331,10 @@ const App = () => {
         ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x + (Math.random() - 0.5) * pulse * 3, end.y + (Math.random() - 0.5) * pulse * 3);
+        ctx.lineTo(end.x + (Math.random() - 0.5) * pulse * 4, end.y + (Math.random() - 0.5) * pulse * 4);
         ctx.stroke();
-        if (Math.random() < 0.2 + pulse * 0.2) {
-          drawSplash(end);
+        if (Math.random() < 0.25 + pulse * 0.25) {
+          drawSplash(end, 0.8);
         }
         progress += 1;
       }
@@ -271,39 +348,60 @@ const App = () => {
     if (animationRef.current) {
       window.cancelAnimationFrame(animationRef.current);
     }
+    cancelEchoes();
     setIsLaunching(false);
     setEnergy(40);
     clearInkLayer();
     clearGestureLayer();
     gesturePointsRef.current = [];
-    setGestureMetrics({ points: 0, distance: 0 });
+    setGestureMetrics({ points: 0, distance: 0, speed: 0 });
+    setLastRitual(null);
   };
 
   return (
     <div className="app">
       <header className="hero">
-        <div>
+        <div className="hero-copy">
           <p className="eyebrow">Rituel de dessin audioreactif</p>
           <h1>Kaï du Shodo</h1>
           <p className="lead">
-            Posez un geste, invoquez un cri, puis laissez l&apos;encre traduire l&apos;énergie du
-            Kaï en traces vibrantes et asynchrones.
+            Accumulez un cri, répartissez son énergie, puis gravez un geste unique : l&apos;encre
+            écoute votre souffle et répond en échos asynchrones.
           </p>
+          <div className="status-row">
+            <span className={`status-pill ${isLaunching ? "active" : isReadyToLaunch ? "ready" : ""}`}>
+              {isLaunching ? "Encre en transe" : isReadyToLaunch ? "Rituel prêt" : "Préparer le rituel"}
+            </span>
+            <span className="status-pill muted">Pulse {Math.round(audioPulse * 100)}%</span>
+          </div>
         </div>
         <div className="energy-orb" style={{ "--pulse": audioPulse }}>
           <span>{Math.round(energy)}%</span>
           <small>Énergie du cri</small>
+          <div className="energy-rings">
+            <span />
+            <span />
+          </div>
         </div>
       </header>
 
       <main className="layout">
         <section className="control-panel">
-          <div className="step">
-            <h2>1. Déclencher le cri</h2>
-            <p>
-              Maintenez le bouton pour accumuler l&apos;énergie du Kaï. Relâchez pour figer
-              la charge.
-            </p>
+          <div className="ritual-steps">
+            {ritualSteps.map((step) => (
+              <article key={step.key} className={`step-card ${step.status}`}>
+                <div className="step-header">
+                  <h2>{step.title}</h2>
+                  <span className="step-status">{step.status === "complete" ? "✓" : "•"}</span>
+                </div>
+                <p>{step.description}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="step action-step">
+            <h3>Capture du cri</h3>
+            <p>Maintenez pour amplifier le Kaï, relâchez pour stabiliser.</p>
             <div className="charge-row">
               <button
                 className={`charge-btn ${isCharging ? "active" : ""}`}
@@ -321,8 +419,8 @@ const App = () => {
           </div>
 
           <div className="step">
-            <h2>2. Répartir l&apos;énergie</h2>
-            <p>Distribuez la charge sonore dans la palette pour guider l&apos;encre.</p>
+            <h3>Palette vibratoire</h3>
+            <p>Orchestrez la distribution : chaque couleur recevra une part du cri.</p>
             <div className="palette">
               {paletteColors.map((item) => (
                 <label key={item.key} className="palette-row">
@@ -347,32 +445,50 @@ const App = () => {
           </div>
 
           <div className="step">
-            <h2>3. Poser le geste</h2>
-            <p>Tracez un geste unique sur la toile pour guider la projection d&apos;encre.</p>
+            <h3>Geste guidé</h3>
+            <p>Un seul trait : laissez votre bras dicter le souffle de l&apos;encre.</p>
             <div className="gesture-meta">
               <span>{gestureMetrics.points} points</span>
               <span>{gestureMetrics.distance} px</span>
+              <span>{gestureMetrics.speed} vitesse</span>
             </div>
           </div>
 
-          <div className="step">
-            <h2>4. Lancer l&apos;encre</h2>
-            <p>L&apos;encre se révèle en mode audioreactif asynchrone.</p>
+          <div className="step launch-step">
+            <h3>Projection</h3>
+            <p>Lancez l&apos;encre et observez ses résonances.</p>
             <div className="action-row">
-              <button className="launch-btn" type="button" onClick={handleLaunch} disabled={isLaunching}>
+              <button className="launch-btn" type="button" onClick={handleLaunch} disabled={!isReadyToLaunch}>
                 {isLaunching ? "Rituel en cours…" : "Projeter l'encre"}
               </button>
               <button className="ghost-btn" type="button" onClick={handleReset}>
                 Réinitialiser
               </button>
             </div>
+            {!isReadyToLaunch && (
+              <p className="hint">Chargez l&apos;énergie et tracez un geste pour déclencher.</p>
+            )}
           </div>
+
+          {lastRitual && (
+            <div className="ritual-summary">
+              <h3>Dernier rituel</h3>
+              <p>
+                {lastRitual.energy}% d&apos;énergie • {lastRitual.distance} px • palette répartie
+              </p>
+              <div className="summary-bar">
+                {lastRitual.palette.map((item) => (
+                  <span key={item.key} style={{ backgroundColor: item.color, flex: item.energy }} />
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="canvas-panel">
           <div
             ref={canvasWrapRef}
-            className="canvas-stage"
+            className={`canvas-stage ${isLaunching ? "launching" : ""}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -383,10 +499,13 @@ const App = () => {
               <div className="pulse-bar" style={{ transform: `scaleX(${audioPulse})` }} />
               <p>
                 {isLaunching
-                  ? "L'encre écoute le cri…"
-                  : "Tracez puis lancez pour révéler la calligraphie."}
+                  ? "L'encre vibre, les échos s'étirent…"
+                  : hasGesture
+                    ? "Relâchez l'encre pour sceller le rituel."
+                    : "Tracez un geste long pour appeler l'encre."}
               </p>
             </div>
+            <div className="sigil" />
           </div>
         </section>
       </main>
