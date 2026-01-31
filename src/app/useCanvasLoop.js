@@ -26,7 +26,7 @@ export const useCanvasLoop = ({ canvasRef, canvasWrapRef, updateCycles, galleryA
     pointerDrawRef.current.draw?.(point, point, 0);
   }, []);
   const onPointerMove = useCallback((from, to) => {
-    if (phaseRef.current !== "DRAWING") return;
+    if (phaseRef.current !== "DRAWING" && phaseRef.current !== "READY") return;
     const now = performance.now();
     const dt = Math.min(48, now - pointerDrawRef.current.lastTime);
     pointerDrawRef.current.lastTime = now;
